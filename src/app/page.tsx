@@ -17,8 +17,15 @@ type CompareResult = {
   unit: string;
   specVolume: number | string;
   offerVolume: number | string;
-  status: "ОК" | "Объем отличается" | "Нет в КП";
+ status: "ОК" | "Объем отличается" | "Частичное совпадение" | "Нет в КП";
+  similarity?: number;
 };
+const normalizeText = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[^а-яa-z0-9]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 function parseExcel(file: File, callback: (items: WorkItem[]) => void) {
   const reader = new FileReader();
@@ -71,7 +78,7 @@ const normalized: WorkItem[] = rawData
 
     return null;
   })
-  .filter(Boolean) as WorkItem[];
+.filter(Boolean) as WorkItem[];
 
     callback(normalized);
   };
@@ -83,6 +90,7 @@ export default function Home() {
   const [specItems, setSpecItems] = useState<WorkItem[]>([]);
   const [offerItems, setOfferItems] = useState<WorkItem[]>([]);
   const [results, setResults] = useState<CompareResult[]>([]);
+  const [showOnlyMatches, setShowOnlyMatches] = useState(false);
 
   const handleSpecUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -96,52 +104,97 @@ export default function Home() {
     parseExcel(file, setOfferItems);
   };
 
-  const compareFiles = () => {
-    const comparison: CompareResult[] = specItems.map((spec) => {
-      const matchedOffer = offerItems.find(
-        (offer) =>
-          offer.rate === spec.rate &&
-          offer.unit === spec.unit
-      );
+const compareFiles = () => {
+  const comparison: CompareResult[] = specItems.map((spec) => {
+    let bestMatch: WorkItem | undefined;
+    let bestSimilarity = 0;
 
-      if (!matchedOffer) {
-        return {
-          name: spec.name,
-          rate: spec.rate,
-          unit: spec.unit,
-          specVolume: spec.projectVolume,
-          offerVolume: "-",
-          status: "Нет в КП",
-        };
+    offerItems.forEach((offer) => {
+      const specName = normalizeText(spec.name);
+const offerName = normalizeText(offer.name);
+
+      const words = specName.split(" ").filter((word) => word.length > 2);
+
+      const matchedWords = words.filter((word) => offerName.includes(word));
+
+     let similarity =
+  words.length > 0 ? (matchedWords.length / words.length) * 100 : 0;
+
+const specTokens = specName.split(" ");
+const offerTokens = offerName.split(" ");
+
+const importantTokens = specTokens.filter((token) =>
+  /[a-z]+[0-9]+|[0-9]+[a-z]+|[0-9]+x[0-9]+/i.test(token)
+);
+
+const matchedImportantTokens = importantTokens.filter((token) =>
+  offerTokens.includes(token)
+);
+
+similarity += matchedImportantTokens.length * 20;
+
+if (similarity > 100) {
+  similarity = 100;
+}
+
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        bestMatch = offer;
       }
+    });
 
-      if (Number(spec.projectVolume) !== Number(matchedOffer.projectVolume)) {
-        return {
-          name: spec.name,
-          rate: spec.rate,
-          unit: spec.unit,
-          specVolume: spec.projectVolume,
-          offerVolume: matchedOffer.projectVolume,
-          status: "Объем отличается",
-        };
-      }
-
+    if (!bestMatch || bestSimilarity < 30) {
       return {
         name: spec.name,
         rate: spec.rate,
         unit: spec.unit,
         specVolume: spec.projectVolume,
-        offerVolume: matchedOffer.projectVolume,
-        status: "ОК",
+        offerVolume: "-",
+        status: "Нет в КП",
+        similarity: bestSimilarity,
       };
-    });
-
-    setResults(comparison);
+    }
+if (bestSimilarity < 80) {
+  return {
+    name: spec.name,
+    rate: spec.rate,
+    unit: spec.unit,
+    specVolume: spec.projectVolume,
+    offerVolume: bestMatch.projectVolume,
+    status: "Частичное совпадение",
+    similarity: bestSimilarity,
   };
+}
+    if (Number(spec.projectVolume) !== Number(bestMatch.projectVolume)) {
+      return {
+        name: spec.name,
+        rate: spec.rate,
+        unit: spec.unit,
+        specVolume: spec.projectVolume,
+        offerVolume: bestMatch.projectVolume,
+        status: "Объем отличается",
+        similarity: bestSimilarity,
+      };
+    }
+
+    return {
+      name: spec.name,
+      rate: spec.rate,
+      unit: spec.unit,
+      specVolume: spec.projectVolume,
+      offerVolume: bestMatch.projectVolume,
+      status: "ОК",
+      similarity: bestSimilarity,
+    };
+  });
+
+  setResults(comparison);
+};
 
   const getStatusClass = (status: CompareResult["status"]) => {
     if (status === "ОК") return "text-green-700 bg-green-100";
     if (status === "Объем отличается") return "text-orange-700 bg-orange-100";
+    if (status === "Частичное совпадение") return "text-yellow-700 bg-yellow-100";
     return "text-red-700 bg-red-100";
   };
 
@@ -176,7 +229,14 @@ export default function Home() {
         className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl text-lg mb-8"
       >
         Сравнить файлы
-      </button>
+    </button>
+
+<button
+  onClick={() => setShowOnlyMatches(!showOnlyMatches)}
+  className="ml-4 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl text-lg mb-8"
+>
+  {showOnlyMatches ? "Показать все" : "Показать только совпадения"}
+</button>
 
       <div className="bg-white rounded-xl p-6 shadow overflow-auto">
         <h2 className="text-2xl font-semibold mb-4">Результат сравнения</h2>
@@ -189,18 +249,24 @@ export default function Home() {
               <th className="border p-2">Ед. изм.</th>
               <th className="border p-2">Объем по спецификации</th>
               <th className="border p-2">Объем по КП</th>
+              <th className="border p-2">Совпадение</th>
               <th className="border p-2">Статус</th>
             </tr>
           </thead>
 
           <tbody>
-            {results.map((item, index) => (
+            {results
+  .filter((item) => !showOnlyMatches || item.status !== "Нет в КП")
+  .map((item, index) => (
               <tr key={index}>
                 <td className="border p-2">{item.name}</td>
                 <td className="border p-2">{item.rate}</td>
                 <td className="border p-2">{item.unit}</td>
                 <td className="border p-2">{item.specVolume}</td>
                 <td className="border p-2">{item.offerVolume}</td>
+                <td className="border p-2">
+  {item.similarity ? `${Math.round(item.similarity)}%` : "-"}
+</td>
                 <td className="border p-2">
                   <span className={`px-3 py-1 rounded-full font-semibold ${getStatusClass(item.status)}`}>
                     {item.status}
