@@ -9,6 +9,7 @@ type WorkItem = {
   rate: string;
   unit: string;
   projectVolume: number | string;
+  rowType: "group" | "item";
 };
 
 type CompareResult = {
@@ -51,6 +52,7 @@ const normalized: WorkItem[] = rawData
         rate: String(row["__EMPTY_1"] || "").replace(/\s+/g, ""),
         unit: row["__EMPTY_2"] || "",
         projectVolume: row["__EMPTY_3"] || "",
+        rowType: row["__EMPTY_3"] ? "item" : "group",
       };
     }
 
@@ -62,6 +64,7 @@ const normalized: WorkItem[] = rawData
         rate: String(row["Обоснование"] || "").replace(/\s+/g, ""),
         unit: row["Ед.изм"] || "",
         projectVolume: row["Количество"] || "",
+        rowType: row["__EMPTY_3"] ? "item" : "group",
       };
     }
 
@@ -73,6 +76,7 @@ const normalized: WorkItem[] = rawData
         rate: String(row["Обоснование"] || row["Артикул"] || "").replace(/\s+/g, ""),
         unit: row["Ед. изм."] || row["Ед.изм"] || "",
         projectVolume: row["Кол-во"] || row["Количество"] || "",
+        rowType: "item",
       };
     }
 
@@ -105,7 +109,7 @@ export default function Home() {
   };
 
 const compareFiles = () => {
-  const comparison: CompareResult[] = specItems.map((spec) => {
+const comparison: CompareResult[] = specItems.map((spec) => {
     let bestMatch: WorkItem | undefined;
     let bestSimilarity = 0;
 
