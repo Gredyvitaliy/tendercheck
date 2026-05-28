@@ -28,6 +28,18 @@ const normalizeText = (text: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const findColumn = (row: any, possibleNames: string[]) => {
+  const keys = Object.keys(row);
+
+  return keys.find((key) => {
+    const normalizedKey = normalizeText(key);
+
+    return possibleNames.some((name) =>
+      normalizedKey.includes(normalizeText(name))
+    );
+  });
+};
+
 function parseExcel(file: File, callback: (items: WorkItem[]) => void) {
   const reader = new FileReader();
 
@@ -38,6 +50,46 @@ function parseExcel(file: File, callback: (items: WorkItem[]) => void) {
     const worksheet = workbook.Sheets[sheetName];
 
     const rawData: any[] = XLSX.utils.sheet_to_json(worksheet);
+    console.log("RAW DATA:", rawData.slice(0, 5));
+    const firstRow = rawData[0] || {};
+    console.log(
+  "Первые 10 строк с колонками:",
+  rawData.slice(0, 10).map((row) => Object.keys(row))
+);
+
+const nameColumn = findColumn(firstRow, [
+  "наименование",
+  "название",
+  "описание",
+  "характеристика",
+  "раздел",
+]);
+
+const quantityColumn = findColumn(firstRow, [
+  "количество",
+  "кол-во",
+  "кол во",
+  "qty",
+  "объем",
+  "кол",
+"кол.",
+"кол-",
+"к-во",
+]);
+
+const unitColumn = findColumn(firstRow, [
+  "ед",
+  "ед изм",
+  "ед. изм",
+  "unit",
+  "изм",
+"единица",
+"единицы",
+"Ед. изме- ре- ния",
+]);
+console.log("Найдена колонка name:", nameColumn);
+console.log("Найдена колонка quantity:", quantityColumn);
+console.log("Найдена колонка unit:", unitColumn);
     console.log(rawData);
     console.log("Первые 5 строк:", rawData.slice(0, 5));
 console.log("Колонки первой строки:", Object.keys(rawData[0] || {}));
