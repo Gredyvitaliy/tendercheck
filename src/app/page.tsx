@@ -40,7 +40,7 @@ const findColumn = (row: any, possibleNames: string[]) => {
   });
 };
 
-function parseExcel(file: File, callback: (items: WorkItem[]) => void) {
+function parseSpecExcel(file: File, callback: (items: WorkItem[]) => void) {
   const reader = new FileReader();
 
   reader.onload = (evt) => {
@@ -92,30 +92,84 @@ const normalized: WorkItem[] = rawData
   .map((row, index) => {
     if (!Array.isArray(row)) return null;
 
-    const name = row[1] || "";
-    const model = row[2] || "";
-    const unit = row[12] || "";
+    const name = String(row[1] || "").trim();
+    const model = String(row[2] || "").trim();
+    const unit = String(row[12] || "").trim();
     const quantity = row[13] || "";
 
     if (!name) return null;
 
+    // пропускаем разделы вида 3.1.1
+    if (/^\d+(\.\d+)+/.test(name)) {
+  return null;
+}
+
+    // пропускаем пустые служебные строки
+   if (
+  !quantity &&
+  !unit &&
+  name.length < 5
+) {
+  return null;
+}
+
     return {
       number: index,
-      name: String(name),
-      rate: String(model),
-      unit: String(unit),
+      name,
+      rate: model,
+      unit,
       projectVolume: quantity,
       rowType: quantity ? "item" : "group",
     };
   })
-.filter(Boolean) as WorkItem[];
+  .filter(Boolean) as WorkItem[];
 
     callback(normalized);
   };
 
   reader.readAsBinaryString(file);
 }
+function parseOfferExcel(file: File, callback: (items: WorkItem[]) => void) {
+  const reader = new FileReader();
 
+  reader.onload = (evt) => {
+    const binaryStr = evt.target?.result;
+    const workbook = XLSX.read(binaryStr, { type: "binary" });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+
+    const rawData: any[] = XLSX.utils.sheet_to_json(worksheet, {
+  header: 1,
+});
+    console.log("OFFER RAW:", rawData.slice(0, 10));
+console.log("OFFER KEYS:", Object.keys(rawData[0] || {}));
+
+const normalized: WorkItem[] = rawData
+  .map((row, index) => {
+    if (!Array.isArray(row)) return null;
+
+    const name = String(row[2] || "").trim();
+    const unit = String(row[3] || "").trim();
+    const quantity = row[4] || "";
+
+    if (!name) return null;
+
+    return {
+      number: index,
+      name,
+      rate: "",
+      unit,
+      projectVolume: quantity,
+      rowType: "item",
+    };
+  })
+  .filter(Boolean) as WorkItem[];
+
+callback(normalized);
+  };
+
+  reader.readAsBinaryString(file);
+}
 export default function Home() {
   const [specItems, setSpecItems] = useState<WorkItem[]>([]);
   const [offerItems, setOfferItems] = useState<WorkItem[]>([]);
@@ -125,23 +179,56 @@ export default function Home() {
   const handleSpecUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    parseExcel(file, setSpecItems);
+    parseSpecExcel(file, setSpecItems);
   };
 
   const handleOfferUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    parseExcel(file, setOfferItems);
+    parseOfferExcel(file, setOfferItems);
   };
 
 const compareFiles = () => {
-const comparison: CompareResult[] = specItems.map((spec) => {
+  const groupedSpecItems: WorkItem[] = Object.values(
+  specItems.reduce((acc, item) => {
+    const key = normalizeText(`${item.name} ${item.rate} ${item.unit}`);
+
+    if (!acc[key]) {
+      acc[key] = { ...item };
+      return acc;
+    }
+
+    acc[key].projectVolume =
+      Number(acc[key].projectVolume || 0) + Number(item.projectVolume || 0);
+
+    return acc;
+  }, {} as Record<string, WorkItem>)
+);
+const groupedOfferItems: WorkItem[] = Object.values(
+  offerItems.reduce((acc, item) => {
+    const key = normalizeText(`${item.name} ${item.rate} ${item.unit}`);
+
+    if (!acc[key]) {
+      acc[key] = { ...item };
+      return acc;
+    }
+
+    acc[key].projectVolume =
+      Number(acc[key].projectVolume || 0) + Number(item.projectVolume || 0);
+
+    return acc;
+  }, {} as Record<string, WorkItem>)
+);
+const comparison: CompareResult[] = groupedSpecItems.map((spec) => {
     let bestMatch: WorkItem | undefined;
     let bestSimilarity = 0;
 
-    offerItems.forEach((offer) => {
-      const specName = normalizeText(spec.name);
-const offerName = normalizeText(offer.name);
+    groupedOfferItems.forEach((offer) => {
+      const specName = normalizeText(`${spec.name} ${spec.rate}`);
+const offerName = normalizeText(`${offer.name} ${offer.rate}`);
+console.log("SPEC:", specName);
+console.log("OFFER:", offerName);
+
 
       const words = specName.split(" ").filter((word) => word.length > 2);
 
@@ -149,6 +236,7 @@ const offerName = normalizeText(offer.name);
 
      let similarity =
   words.length > 0 ? (matchedWords.length / words.length) * 100 : 0;
+  console.log("SIMILARITY:", similarity);
 
 const specTokens = specName.split(" ");
 const offerTokens = offerName.split(" ");
@@ -162,9 +250,25 @@ const matchedImportantTokens = importantTokens.filter((token) =>
 );
 
 similarity += matchedImportantTokens.length * 20;
+const dimensionsSpec =
+  specName.match(/\d+\-\d+|\d+x\d+/g) || [];
+
+const dimensionsOffer =
+  offerName.match(/\d+\-\d+|\d+x\d+/g) || [];
+
+if (
+  dimensionsSpec.length &&
+  dimensionsOffer.length &&
+  dimensionsSpec.join() !== dimensionsOffer.join()
+) {
+  similarity -= 50;
+}
 
 if (similarity > 100) {
   similarity = 100;
+}
+if (similarity < 0) {
+  similarity = 0;
 }
 
       if (similarity > bestSimilarity) {
