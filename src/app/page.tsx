@@ -55,16 +55,16 @@ function parseExcel(file: File, callback: (items: WorkItem[]) => void) {
 const dataRows = rawData.slice(1);
 
 console.log(
-  "Первая позиция:",
-  {
-    name: dataRows[0]?.[1],
-    unit: dataRows[0]?.[12],
-    quantity: dataRows[0]?.[13],
-  }
+  "Объект первой позиции:",
+  rawData[5]
 );
 console.log(
   "Первые 30 строк:",
   dataRows.slice(0, 30)
+);
+console.log(
+  "Позиция пример:",
+  dataRows[5]
 );
     console.log("RAW DATA:", rawData.slice(0, 5));
     const firstRow = rawData[0] || {};
@@ -73,36 +73,14 @@ console.log(
   rawData.slice(0, 10).map((row) => Object.keys(row))
 );
 
-const nameColumn = findColumn(firstRow, [
-  "наименование",
-  "название",
-  "описание",
-  "характеристика",
-  "раздел",
-]);
+const nameColumn = "1";
+const quantityColumn = "13";
+const unitColumn = "12";
 
-const quantityColumn = findColumn(firstRow, [
-  "количество",
-  "кол-во",
-  "кол во",
-  "qty",
-  "объем",
-  "кол",
-"кол.",
-"кол-",
-"к-во",
-]);
+console.log("Найдена колонка name:", nameColumn);
+console.log("Найдена колонка quantity:", quantityColumn);
+console.log("Найдена колонка unit:", unitColumn);
 
-const unitColumn = findColumn(firstRow, [
-  "ед",
-  "ед изм",
-  "ед. изм",
-  "unit",
-  "изм",
-"единица",
-"единицы",
-"Ед. изме- ре- ния",
-]);
 console.log("Найдена колонка name:", nameColumn);
 console.log("Найдена колонка quantity:", quantityColumn);
 console.log("Найдена колонка unit:", unitColumn);
@@ -111,44 +89,24 @@ console.log("Найдена колонка unit:", unitColumn);
 console.log("Колонки первой строки:", Object.keys(rawData[0] || {}));
 
 const normalized: WorkItem[] = rawData
-  .map((row) => {
-    // Старый формат
-    if (row["__EMPTY"]) {
-      return {
-        number: row["__EMPTY"],
-        name: row["АР3.2  АПЧ. 2 этаж. Корпус №150"] || "",
-        rate: String(row["__EMPTY_1"] || "").replace(/\s+/g, ""),
-        unit: row["__EMPTY_2"] || "",
-        projectVolume: row["__EMPTY_3"] || "",
-        rowType: row["__EMPTY_3"] ? "item" : "group",
-      };
-    }
+  .map((row, index) => {
+    if (!Array.isArray(row)) return null;
 
-    // Новый формат спецификации
-    if (row["Наименование и техническая характеристика"]) {
-      return {
-        number: row["__rowNum__"] || "",
-        name: row["Наименование и техническая характеристика"] || "",
-        rate: String(row["Обоснование"] || "").replace(/\s+/g, ""),
-        unit: row["Ед.изм"] || "",
-        projectVolume: row["Количество"] || "",
-        rowType: row["__EMPTY_3"] ? "item" : "group",
-      };
-    }
+    const name = row[1] || "";
+    const model = row[2] || "";
+    const unit = row[12] || "";
+    const quantity = row[13] || "";
 
-    // Формат КП
-    if (row["Раздел / система"] && (row["Кол-во"] || row["Количество"])) {
-      return {
-        number: row["__rowNum__"] || "",
-        name: row["Раздел / система"] || "",
-        rate: String(row["Обоснование"] || row["Артикул"] || "").replace(/\s+/g, ""),
-        unit: row["Ед. изм."] || row["Ед.изм"] || "",
-        projectVolume: row["Кол-во"] || row["Количество"] || "",
-        rowType: "item",
-      };
-    }
+    if (!name) return null;
 
-    return null;
+    return {
+      number: index,
+      name: String(name),
+      rate: String(model),
+      unit: String(unit),
+      projectVolume: quantity,
+      rowType: quantity ? "item" : "group",
+    };
   })
 .filter(Boolean) as WorkItem[];
 
