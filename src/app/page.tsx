@@ -49,7 +49,23 @@ function parseExcel(file: File, callback: (items: WorkItem[]) => void) {
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
 
-    const rawData: any[] = XLSX.utils.sheet_to_json(worksheet);
+    const rawData: any[] = XLSX.utils.sheet_to_json(worksheet, {
+  header: 1,
+});
+const dataRows = rawData.slice(1);
+
+console.log(
+  "Первая позиция:",
+  {
+    name: dataRows[0]?.[1],
+    unit: dataRows[0]?.[12],
+    quantity: dataRows[0]?.[13],
+  }
+);
+console.log(
+  "Первые 30 строк:",
+  dataRows.slice(0, 30)
+);
     console.log("RAW DATA:", rawData.slice(0, 5));
     const firstRow = rawData[0] || {};
     console.log(
