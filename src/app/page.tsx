@@ -17,8 +17,13 @@ type CompareResult = {
   rate: string;
   unit: string;
   specVolume: number | string;
+
+  offerName: string;
+  offerRate: string;
+  offerUnit: string;
   offerVolume: number | string;
- status: "ОК" | "Объем отличается" | "Частичное совпадение" | "Нет в КП";
+
+  status: "ОК" | "Объем отличается" | "Частичное совпадение" | "Нет в КП";
   similarity?: number;
 };
 const normalizeText = (text: string) =>
@@ -280,15 +285,20 @@ if (similarity < 0) {
     });
 
     if (!bestMatch || bestSimilarity < 30) {
-      return {
-        name: spec.name,
-        rate: spec.rate,
-        unit: spec.unit,
-        specVolume: spec.projectVolume,
-        offerVolume: "-",
-        status: "Нет в КП",
-        similarity: bestSimilarity,
-      };
+     return {
+  name: spec.name,
+  rate: spec.rate,
+  unit: spec.unit,
+  specVolume: spec.projectVolume,
+
+  offerName: "-",
+  offerRate: "-",
+  offerUnit: "-",
+  offerVolume: "-",
+
+  status: "Нет в КП",
+  similarity: bestSimilarity,
+};
     }
 if (bestSimilarity < 80) {
   return {
@@ -297,6 +307,9 @@ if (bestSimilarity < 80) {
     unit: spec.unit,
     specVolume: spec.projectVolume,
     offerVolume: bestMatch.projectVolume,
+    offerName: bestMatch.name,
+offerRate: bestMatch.rate,
+offerUnit: bestMatch.unit,
     status: "Частичное совпадение",
     similarity: bestSimilarity,
   };
@@ -308,6 +321,9 @@ if (bestSimilarity < 80) {
         unit: spec.unit,
         specVolume: spec.projectVolume,
         offerVolume: bestMatch.projectVolume,
+        offerName: bestMatch.name,
+offerRate: bestMatch.rate,
+offerUnit: bestMatch.unit,
         status: "Объем отличается",
         similarity: bestSimilarity,
       };
@@ -319,6 +335,9 @@ if (bestSimilarity < 80) {
       unit: spec.unit,
       specVolume: spec.projectVolume,
       offerVolume: bestMatch.projectVolume,
+      offerName: bestMatch.name,
+offerRate: bestMatch.rate,
+offerUnit: bestMatch.unit,
       status: "ОК",
       similarity: bestSimilarity,
     };
@@ -349,29 +368,65 @@ const missingCount = results.filter(
   (item) => item.status === "Нет в КП"
 ).length;
 const exportResultsToExcel = () => {
+  const summaryData = [
+    { "Статус": "ОК", "Количество": okCount },
+    { "Статус": "Объем отличается", "Количество": volumeDiffCount },
+    { "Статус": "Частичное совпадение", "Количество": partialCount },
+    { "Статус": "Нет в КП", "Количество": missingCount },
+  ];
+
   const exportData = results.map((item) => ({
-    "Наименование работы": item.name,
-    "Расценка": item.rate,
-    "Ед. изм.": item.unit,
+    "Позиция по спецификации": item.name,
+    "Модель / артикул спецификации": item.rate,
+    "Ед. изм. спецификации": item.unit,
     "Объем по спецификации": item.specVolume,
+
+    "Позиция в КП": item.offerName,
+    "Модель / артикул КП": item.offerRate,
+    "Ед. изм. КП": item.offerUnit,
     "Объем по КП": item.offerVolume,
+
     "Совпадение": item.similarity ? `${Math.round(item.similarity)}%` : "-",
     "Статус": item.status,
   }));
+
+  const workbook = XLSX.utils.book_new();
+
+  const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+  summarySheet["!cols"] = [{ wch: 25 }, { wch: 15 }];
+
+  const summaryRange = XLSX.utils.decode_range(summarySheet["!ref"] || "A1:B1");
+
+  for (let col = summaryRange.s.c; col <= summaryRange.e.c; col++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+
+    if (summarySheet[cellAddress]) {
+      summarySheet[cellAddress].s = {
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "374151" } },
+        alignment: { horizontal: "center", vertical: "center" },
+      };
+    }
+  }
+
+  XLSX.utils.book_append_sheet(workbook, summarySheet, "Сводка");
 
   const worksheet = XLSX.utils.json_to_sheet(exportData);
 
   worksheet["!cols"] = [
     { wch: 55 },
-    { wch: 25 },
-    { wch: 12 },
-    { wch: 20 },
+    { wch: 30 },
+    { wch: 18 },
+    { wch: 22 },
+    { wch: 55 },
+    { wch: 30 },
+    { wch: 15 },
     { wch: 15 },
     { wch: 15 },
     { wch: 25 },
   ];
 
-  const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:G1");
+  const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:J1");
 
   const headerStyle = {
     font: { bold: true, color: { rgb: "FFFFFF" } },
@@ -388,7 +443,7 @@ const exportResultsToExcel = () => {
   }
 
   for (let row = 1; row <= range.e.r; row++) {
-    const statusCellAddress = XLSX.utils.encode_cell({ r: row, c: 6 });
+    const statusCellAddress = XLSX.utils.encode_cell({ r: row, c: 9 });
     const statusCell = worksheet[statusCellAddress];
 
     if (!statusCell) continue;
@@ -425,9 +480,7 @@ const exportResultsToExcel = () => {
     };
   }
 
-  const workbook = XLSX.utils.book_new();
-
-  XLSX.utils.book_append_sheet(workbook, worksheet, "TenderCheck Report");
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Детальный отчет");
 
   XLSX.writeFile(workbook, "tendercheck-report.xlsx");
 };
