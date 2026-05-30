@@ -323,6 +323,29 @@ const partialCount = results.filter(
 const missingCount = results.filter(
   (item) => item.status === "Нет в КП"
 ).length;
+const filteredResults = results
+  .filter((item) => statusFilter === "Все" || item.status === statusFilter)
+  .filter((item) => {
+    const query = searchQuery.toLowerCase().trim();
+
+    if (!query) return true;
+
+    return [
+      item.name,
+      item.rate,
+      item.unit,
+      String(item.specVolume),
+      item.offerName,
+      item.offerRate,
+      item.offerUnit,
+      String(item.offerVolume),
+      item.status,
+      String(item.similarity || ""),
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  });
 const exportResultsToExcel = () => {
   const summaryData = [
     { "Статус": "ОК", "Количество": okCount },
@@ -506,13 +529,28 @@ for (let row = 1; row <= range.e.r; row++) {
       <div className="bg-white rounded-xl p-6 shadow overflow-auto">
         <h2 className="text-2xl font-semibold mb-4">Результат сравнения</h2>
         <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-          <input
-  type="text"
-  value={searchQuery}
-  onChange={(e) => setSearchQuery(e.target.value)}
-  placeholder="Поиск по позициям, моделям, статусам..."
-  className="mb-4 w-full border border-gray-300 rounded-xl px-4 py-3 text-sm"
-/>
+        
+<div className="mb-4 flex gap-3 items-center">
+  <input
+    type="text"
+    value={searchQuery}
+    onChange={(e) => setSearchQuery(e.target.value)}
+    placeholder="Поиск по позициям, моделям, статусам..."
+    className="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-sm"
+  />
+
+  <button
+    onClick={() => setSearchQuery("")}
+    disabled={!searchQuery}
+    className="bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 px-4 py-3 rounded-xl text-sm font-semibold"
+  >
+    Очистить
+  </button>
+</div>
+
+<div className="mb-4 text-sm text-gray-600">
+  Найдено строк: {filteredResults.length} из {results.length}
+</div>
           <div className="mb-4 flex gap-2 flex-wrap">
   <button
     onClick={() => setStatusFilter("Все")}
@@ -580,30 +618,7 @@ for (let row = 1; row <= range.e.r; row++) {
           </thead>
 
           <tbody>
-           {results
-  .filter((item) => statusFilter === "Все" || item.status === statusFilter)
-  .filter((item) => {
-    const query = searchQuery.toLowerCase().trim();
-
-    if (!query) return true;
-
-    return [
-      item.name,
-      item.rate,
-      item.unit,
-      String(item.specVolume),
-      item.offerName,
-      item.offerRate,
-      item.offerUnit,
-      String(item.offerVolume),
-      item.status,
-      String(item.similarity || ""),
-    ]
-      .join(" ")
-      .toLowerCase()
-      .includes(query);
-  })
-  .map((item, index) => (
+           {filteredResults.map((item, index) => (
               <tr key={index}>
                 <td className="border p-2">{item.name}</td>
                 <td className="border p-2">{item.rate}</td>
