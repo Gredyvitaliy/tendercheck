@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 
 type WorkItem = {
   number: string | number;
@@ -348,7 +348,89 @@ const partialCount = results.filter(
 const missingCount = results.filter(
   (item) => item.status === "Нет в КП"
 ).length;
+const exportResultsToExcel = () => {
+  const exportData = results.map((item) => ({
+    "Наименование работы": item.name,
+    "Расценка": item.rate,
+    "Ед. изм.": item.unit,
+    "Объем по спецификации": item.specVolume,
+    "Объем по КП": item.offerVolume,
+    "Совпадение": item.similarity ? `${Math.round(item.similarity)}%` : "-",
+    "Статус": item.status,
+  }));
 
+  const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+  worksheet["!cols"] = [
+    { wch: 55 },
+    { wch: 25 },
+    { wch: 12 },
+    { wch: 20 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 25 },
+  ];
+
+  const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:G1");
+
+  const headerStyle = {
+    font: { bold: true, color: { rgb: "FFFFFF" } },
+    fill: { fgColor: { rgb: "374151" } },
+    alignment: { horizontal: "center", vertical: "center" },
+  };
+
+  for (let col = range.s.c; col <= range.e.c; col++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+
+    if (worksheet[cellAddress]) {
+      worksheet[cellAddress].s = headerStyle;
+    }
+  }
+
+  for (let row = 1; row <= range.e.r; row++) {
+    const statusCellAddress = XLSX.utils.encode_cell({ r: row, c: 6 });
+    const statusCell = worksheet[statusCellAddress];
+
+    if (!statusCell) continue;
+
+    const status = String(statusCell.v);
+
+    let fillColor = "FEE2E2";
+    let fontColor = "991B1B";
+
+    if (status === "ОК") {
+      fillColor = "DCFCE7";
+      fontColor = "166534";
+    }
+
+    if (status === "Объем отличается") {
+      fillColor = "FFEDD5";
+      fontColor = "9A3412";
+    }
+
+    if (status === "Частичное совпадение") {
+      fillColor = "FEF9C3";
+      fontColor = "854D0E";
+    }
+
+    if (status === "Нет в КП") {
+      fillColor = "FEE2E2";
+      fontColor = "991B1B";
+    }
+
+    statusCell.s = {
+      font: { bold: true, color: { rgb: fontColor } },
+      fill: { fgColor: { rgb: fillColor } },
+      alignment: { horizontal: "center", vertical: "center" },
+    };
+  }
+
+  const workbook = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(workbook, worksheet, "TenderCheck Report");
+
+  XLSX.writeFile(workbook, "tendercheck-report.xlsx");
+};
   return (
     <main className="min-h-screen bg-gray-100 p-10">
       <h1 className="text-4xl font-bold mb-6 text-gray-800">TenderCheck</h1>
@@ -381,6 +463,13 @@ const missingCount = results.filter(
       >
         Сравнить файлы
     </button>
+    <button
+  onClick={exportResultsToExcel}
+  disabled={results.length === 0}
+  className="ml-4 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-xl text-lg mb-8"
+>
+  Скачать отчет Excel
+</button>
 
 
       <div className="bg-white rounded-xl p-6 shadow overflow-auto">
