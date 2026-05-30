@@ -57,42 +57,6 @@ function parseSpecExcel(file: File, callback: (items: WorkItem[]) => void) {
     const rawData: any[] = XLSX.utils.sheet_to_json(worksheet, {
   header: 1,
 });
-const dataRows = rawData.slice(1);
-
-console.log(
-  "Объект первой позиции:",
-  rawData[5]
-);
-console.log(
-  "Первые 30 строк:",
-  dataRows.slice(0, 30)
-);
-console.log(
-  "Позиция пример:",
-  dataRows[5]
-);
-    console.log("RAW DATA:", rawData.slice(0, 5));
-    const firstRow = rawData[0] || {};
-    console.log(
-  "Первые 10 строк с колонками:",
-  rawData.slice(0, 10).map((row) => Object.keys(row))
-);
-
-const nameColumn = "1";
-const quantityColumn = "13";
-const unitColumn = "12";
-
-console.log("Найдена колонка name:", nameColumn);
-console.log("Найдена колонка quantity:", quantityColumn);
-console.log("Найдена колонка unit:", unitColumn);
-
-console.log("Найдена колонка name:", nameColumn);
-console.log("Найдена колонка quantity:", quantityColumn);
-console.log("Найдена колонка unit:", unitColumn);
-    console.log(rawData);
-    console.log("Первые 5 строк:", rawData.slice(0, 5));
-console.log("Колонки первой строки:", Object.keys(rawData[0] || {}));
-
 const normalized: WorkItem[] = rawData
   .map((row, index) => {
     if (!Array.isArray(row)) return null;
@@ -144,9 +108,6 @@ function parseOfferExcel(file: File, callback: (items: WorkItem[]) => void) {
     const rawData: any[] = XLSX.utils.sheet_to_json(worksheet, {
   header: 1,
 });
-    console.log("OFFER RAW:", rawData.slice(0, 10));
-console.log("OFFER KEYS:", Object.keys(rawData[0] || {}));
-
 const normalized: WorkItem[] = rawData
   .map((row, index) => {
     if (!Array.isArray(row)) return null;
@@ -231,9 +192,6 @@ const comparison: CompareResult[] = groupedSpecItems.map((spec) => {
     groupedOfferItems.forEach((offer) => {
       const specName = normalizeText(`${spec.name} ${spec.rate}`);
 const offerName = normalizeText(`${offer.name} ${offer.rate}`);
-console.log("SPEC:", specName);
-console.log("OFFER:", offerName);
-
 
       const words = specName.split(" ").filter((word) => word.length > 2);
 
@@ -241,7 +199,6 @@ console.log("OFFER:", offerName);
 
      let similarity =
   words.length > 0 ? (matchedWords.length / words.length) * 100 : 0;
-  console.log("SIMILARITY:", similarity);
 
 const specTokens = specName.split(" ");
 const offerTokens = offerName.split(" ");
