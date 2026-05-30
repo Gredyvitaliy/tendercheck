@@ -100,21 +100,19 @@ const normalized: WorkItem[] = rawData
     const name = String(row[1] || "").trim();
     const model = String(row[2] || "").trim();
     const unit = String(row[12] || "").trim();
-    const quantity = row[13] || "";
+    const quantityRaw = row[13];
+const quantityNumber = Number(
+  String(quantityRaw || "").replace(",", ".").trim()
+);
 
-    if (!name) return null;
+if (!name) return null;
+
+if (!unit) return null;
+
+if (!quantityRaw || Number.isNaN(quantityNumber)) return null;
 
     // пропускаем разделы вида 3.1.1
     if (/^\d+(\.\d+)+/.test(name)) {
-  return null;
-}
-
-    // пропускаем пустые служебные строки
-   if (
-  !quantity &&
-  !unit &&
-  name.length < 5
-) {
   return null;
 }
 
@@ -123,8 +121,8 @@ const normalized: WorkItem[] = rawData
       name,
       rate: model,
       unit,
-      projectVolume: quantity,
-      rowType: quantity ? "item" : "group",
+     projectVolume: quantityNumber,
+rowType: "item",
     };
   })
   .filter(Boolean) as WorkItem[];
