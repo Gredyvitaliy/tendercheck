@@ -303,6 +303,21 @@ offerUnit: bestMatch.unit,
 };
 
   const getStatusClass = (status: CompareResult["status"]) => {
+    const getStatusComment = (item: CompareResult) => {
+  if (item.status === "ОК") {
+    return "Позиция найдена в КП, объем совпадает.";
+  }
+
+  if (item.status === "Объем отличается") {
+    return "Позиция найдена, но объем по спецификации отличается от объема в КП.";
+  }
+
+  if (item.status === "Частичное совпадение") {
+    return "Найдена похожая позиция. Требуется ручная проверка наименования, модели или характеристик.";
+  }
+
+  return "Позиция из спецификации не найдена в КП.";
+};
     if (status === "ОК") return "text-green-700 bg-green-100";
     if (status === "Объем отличается") return "text-orange-700 bg-orange-100";
     if (status === "Частичное совпадение") return "text-yellow-700 bg-yellow-100";
@@ -346,6 +361,21 @@ const filteredResults = results
       .toLowerCase()
       .includes(query);
   });
+  const getStatusComment = (item: CompareResult) => {
+  if (item.status === "ОК") {
+    return "Позиция найдена в КП, объем совпадает.";
+  }
+
+  if (item.status === "Объем отличается") {
+    return "Позиция найдена, но объем по спецификации отличается от объема в КП.";
+  }
+
+  if (item.status === "Частичное совпадение") {
+    return "Найдена похожая позиция. Требуется ручная проверка наименования, модели или характеристик.";
+  }
+
+  return "Позиция из спецификации не найдена в КП.";
+};
 const exportResultsToExcel = () => {
   const summaryData = [
     { "Статус": "ОК", "Количество": okCount },
@@ -367,6 +397,7 @@ const exportResultsToExcel = () => {
 
     "Совпадение": item.similarity ? `${Math.round(item.similarity)}%` : "-",
     "Статус": item.status,
+    "Комментарий": getStatusComment(item),
   }));
 
   const workbook = XLSX.utils.book_new();
@@ -403,13 +434,14 @@ const exportResultsToExcel = () => {
     { wch: 15 },
     { wch: 15 },
     { wch: 25 },
+    { wch: 45 },
   ];
 
  worksheet["!autofilter"] = {
   ref: worksheet["!ref"] || "A1:J1",
 };
 
-const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:J1");
+const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:K1");
 
 const borderStyle = {
   top: { style: "thin", color: { rgb: "D1D5DB" } },
