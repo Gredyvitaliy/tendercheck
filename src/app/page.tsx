@@ -426,59 +426,81 @@ const exportResultsToExcel = () => {
     { wch: 25 },
   ];
 
-  const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:J1");
+ worksheet["!autofilter"] = {
+  ref: worksheet["!ref"] || "A1:J1",
+};
 
-  const headerStyle = {
-    font: { bold: true, color: { rgb: "FFFFFF" } },
-    fill: { fgColor: { rgb: "374151" } },
-    alignment: { horizontal: "center", vertical: "center" },
-  };
+const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:J1");
+
+const borderStyle = {
+  top: { style: "thin", color: { rgb: "D1D5DB" } },
+  bottom: { style: "thin", color: { rgb: "D1D5DB" } },
+  left: { style: "thin", color: { rgb: "D1D5DB" } },
+  right: { style: "thin", color: { rgb: "D1D5DB" } },
+};
+
+const headerStyle = {
+  font: { bold: true, color: { rgb: "FFFFFF" } },
+  fill: { fgColor: { rgb: "374151" } },
+  alignment: {
+    horizontal: "center",
+    vertical: "center",
+    wrapText: true,
+  },
+  border: borderStyle,
+};
+
+for (let row = 1; row <= range.e.r; row++) {
+  const statusCellAddress = XLSX.utils.encode_cell({ r: row, c: 9 });
+  const statusCell = worksheet[statusCellAddress];
+
+  if (!statusCell) continue;
+
+  const status = String(statusCell.v);
+
+  let fillColor = "FEE2E2";
+  let fontColor = "991B1B";
+
+  if (status === "ОК") {
+    fillColor = "DCFCE7";
+    fontColor = "166534";
+  }
+
+  if (status === "Объем отличается") {
+    fillColor = "FFEDD5";
+    fontColor = "9A3412";
+  }
+
+  if (status === "Частичное совпадение") {
+    fillColor = "FEF9C3";
+    fontColor = "854D0E";
+  }
+
+  if (status === "Нет в КП") {
+    fillColor = "FEE2E2";
+    fontColor = "991B1B";
+  }
 
   for (let col = range.s.c; col <= range.e.c; col++) {
-    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+    const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+    const cell = worksheet[cellAddress];
 
-    if (worksheet[cellAddress]) {
-      worksheet[cellAddress].s = headerStyle;
-    }
-  }
+    if (!cell) continue;
 
-  for (let row = 1; row <= range.e.r; row++) {
-    const statusCellAddress = XLSX.utils.encode_cell({ r: row, c: 9 });
-    const statusCell = worksheet[statusCellAddress];
-
-    if (!statusCell) continue;
-
-    const status = String(statusCell.v);
-
-    let fillColor = "FEE2E2";
-    let fontColor = "991B1B";
-
-    if (status === "ОК") {
-      fillColor = "DCFCE7";
-      fontColor = "166534";
-    }
-
-    if (status === "Объем отличается") {
-      fillColor = "FFEDD5";
-      fontColor = "9A3412";
-    }
-
-    if (status === "Частичное совпадение") {
-      fillColor = "FEF9C3";
-      fontColor = "854D0E";
-    }
-
-    if (status === "Нет в КП") {
-      fillColor = "FEE2E2";
-      fontColor = "991B1B";
-    }
-
-    statusCell.s = {
-      font: { bold: true, color: { rgb: fontColor } },
+    cell.s = {
       fill: { fgColor: { rgb: fillColor } },
-      alignment: { horizontal: "center", vertical: "center" },
+      alignment: {
+        vertical: "top",
+        wrapText: true,
+      },
+      border: borderStyle,
+      font:
+        col === 9
+          ? { bold: true, color: { rgb: fontColor } }
+          : { color: { rgb: "111827" } },
     };
   }
+}
 
   XLSX.utils.book_append_sheet(workbook, worksheet, "Детальный отчет");
 
