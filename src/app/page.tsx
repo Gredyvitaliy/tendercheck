@@ -2,30 +2,8 @@
 
 import { useState } from "react";
 import * as XLSX from "xlsx-js-style";
+import type { WorkItem, CompareResult } from "./types";
 
-type WorkItem = {
-  number: string | number;
-  name: string;
-  rate: string;
-  unit: string;
-  projectVolume: number | string;
-  rowType: "group" | "item";
-};
-
-type CompareResult = {
-  name: string;
-  rate: string;
-  unit: string;
-  specVolume: number | string;
-
-  offerName: string;
-  offerRate: string;
-  offerUnit: string;
-  offerVolume: number | string;
-
-  status: "ОК" | "Объем отличается" | "Частичное совпадение" | "Нет в КП";
-  similarity?: number;
-};
 const normalizeText = (text: string) =>
   text
     .toLowerCase()
@@ -142,6 +120,7 @@ export default function Home() {
   CompareResult["status"] | "Все"
 >("Все");
 const [searchQuery, setSearchQuery] = useState("");
+const [uploadResetKey, setUploadResetKey] = useState(0);
 
   const handleSpecUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -154,6 +133,15 @@ const [searchQuery, setSearchQuery] = useState("");
     if (!file) return;
     parseOfferExcel(file, setOfferItems);
   };
+
+  const clearAllData = () => {
+  setSpecItems([]);
+  setOfferItems([]);
+  setResults([]);
+  setSearchQuery("");
+  setStatusFilter("Все");
+  setUploadResetKey((prev) => prev + 1);
+};
 
 const compareFiles = () => {
   const groupedSpecItems: WorkItem[] = Object.values(
@@ -303,21 +291,6 @@ offerUnit: bestMatch.unit,
 };
 
   const getStatusClass = (status: CompareResult["status"]) => {
-    const getStatusComment = (item: CompareResult) => {
-  if (item.status === "ОК") {
-    return "Позиция найдена в КП, объем совпадает.";
-  }
-
-  if (item.status === "Объем отличается") {
-    return "Позиция найдена, но объем по спецификации отличается от объема в КП.";
-  }
-
-  if (item.status === "Частичное совпадение") {
-    return "Найдена похожая позиция. Требуется ручная проверка наименования, модели или характеристик.";
-  }
-
-  return "Позиция из спецификации не найдена в КП.";
-};
     if (status === "ОК") return "text-green-700 bg-green-100";
     if (status === "Объем отличается") return "text-orange-700 bg-orange-100";
     if (status === "Частичное совпадение") return "text-yellow-700 bg-yellow-100";
@@ -438,7 +411,7 @@ const exportResultsToExcel = () => {
   ];
 
  worksheet["!autofilter"] = {
-  ref: worksheet["!ref"] || "A1:J1",
+  ref: worksheet["!ref"] || "A1:K1",
 };
 
 const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:K1");
@@ -460,6 +433,13 @@ const headerStyle = {
   },
   border: borderStyle,
 };
+for (let col = range.s.c; col <= range.e.c; col++) {
+  const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+
+  if (worksheet[cellAddress]) {
+    worksheet[cellAddress].s = headerStyle;
+  }
+}
 
 for (let row = 1; row <= range.e.r; row++) {
   const statusCellAddress = XLSX.utils.encode_cell({ r: row, c: 9 });
@@ -528,7 +508,12 @@ for (let row = 1; row <= range.e.r; row++) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-white rounded-xl p-6 shadow">
           <h2 className="text-xl font-semibold mb-4">1. Эталон / спецификация</h2>
-          <input type="file" accept=".xlsx, .xls" onChange={handleSpecUpload} />
+          <input
+  key={`spec-${uploadResetKey}`}
+  type="file"
+  accept=".xlsx, .xls"
+  onChange={handleSpecUpload}
+/>
           <p className="mt-4 text-sm text-gray-600">
             Загружено позиций: {specItems.length}
           </p>
@@ -536,7 +521,14 @@ for (let row = 1; row <= range.e.r; row++) {
 
         <div className="bg-white rounded-xl p-6 shadow">
           <h2 className="text-xl font-semibold mb-4">2. КП подрядчика</h2>
-          <input type="file" accept=".xlsx, .xls" onChange={handleOfferUpload} />
+
+         <input
+  key={`offer-${uploadResetKey}`}
+  type="file"
+  accept=".xlsx, .xls"
+  onChange={handleOfferUpload}
+/>
+
           <p className="mt-4 text-sm text-gray-600">
             Загружено позиций: {offerItems.length}
           </p>
@@ -555,6 +547,17 @@ for (let row = 1; row <= range.e.r; row++) {
   className="ml-4 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-xl text-lg mb-8"
 >
   Скачать отчет Excel
+</button>
+<button
+  onClick={clearAllData}
+  disabled={
+    specItems.length === 0 &&
+    offerItems.length === 0 &&
+    results.length === 0
+  }
+  className="ml-4 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-xl text-lg mb-8"
+>
+  Очистить файлы
 </button>
 
 
