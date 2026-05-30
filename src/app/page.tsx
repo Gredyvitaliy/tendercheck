@@ -174,7 +174,9 @@ export default function Home() {
   const [specItems, setSpecItems] = useState<WorkItem[]>([]);
   const [offerItems, setOfferItems] = useState<WorkItem[]>([]);
   const [results, setResults] = useState<CompareResult[]>([]);
-  const [showOnlyMatches, setShowOnlyMatches] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<
+  CompareResult["status"] | "Все"
+>("Все");
 
   const handleSpecUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -331,6 +333,21 @@ if (bestSimilarity < 80) {
     if (status === "Частичное совпадение") return "text-yellow-700 bg-yellow-100";
     return "text-red-700 bg-red-100";
   };
+  const okCount = results.filter(
+  (item) => item.status === "ОК"
+).length;
+
+const volumeDiffCount = results.filter(
+  (item) => item.status === "Объем отличается"
+).length;
+
+const partialCount = results.filter(
+  (item) => item.status === "Частичное совпадение"
+).length;
+
+const missingCount = results.filter(
+  (item) => item.status === "Нет в КП"
+).length;
 
   return (
     <main className="min-h-screen bg-gray-100 p-10">
@@ -365,15 +382,62 @@ if (bestSimilarity < 80) {
         Сравнить файлы
     </button>
 
-<button
-  onClick={() => setShowOnlyMatches(!showOnlyMatches)}
-  className="ml-4 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl text-lg mb-8"
->
-  {showOnlyMatches ? "Показать все" : "Показать только совпадения"}
-</button>
 
       <div className="bg-white rounded-xl p-6 shadow overflow-auto">
         <h2 className="text-2xl font-semibold mb-4">Результат сравнения</h2>
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="mb-4 flex gap-2 flex-wrap">
+  <button
+    onClick={() => setStatusFilter("Все")}
+    className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded-lg text-sm font-semibold"
+  >
+    Все
+  </button>
+
+  <button
+    onClick={() => setStatusFilter("ОК")}
+    className="bg-green-100 hover:bg-green-200 text-green-800 px-4 py-2 rounded-lg text-sm font-semibold"
+  >
+    ОК
+  </button>
+
+  <button
+    onClick={() => setStatusFilter("Объем отличается")}
+    className="bg-orange-100 hover:bg-orange-200 text-orange-800 px-4 py-2 rounded-lg text-sm font-semibold"
+  >
+    Объем отличается
+  </button>
+
+  <button
+    onClick={() => setStatusFilter("Частичное совпадение")}
+    className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-4 py-2 rounded-lg text-sm font-semibold"
+  >
+    Частичное совпадение
+  </button>
+
+  <button
+    onClick={() => setStatusFilter("Нет в КП")}
+    className="bg-red-100 hover:bg-red-200 text-red-800 px-4 py-2 rounded-lg text-sm font-semibold"
+  >
+    Нет в КП
+  </button>
+</div>
+  <div className="bg-green-50 text-green-800 rounded-xl p-4 font-semibold">
+    ✅ ОК: {okCount}
+  </div>
+
+  <div className="bg-orange-50 text-orange-800 rounded-xl p-4 font-semibold">
+    ⚠️ Объем отличается: {volumeDiffCount}
+  </div>
+
+  <div className="bg-yellow-50 text-yellow-800 rounded-xl p-4 font-semibold">
+    🟡 Частичное совпадение: {partialCount}
+  </div>
+
+  <div className="bg-red-50 text-red-800 rounded-xl p-4 font-semibold">
+    ❌ Нет в КП: {missingCount}
+  </div>
+</div>
 
         <table className="w-full border-collapse text-sm">
           <thead>
@@ -389,8 +453,8 @@ if (bestSimilarity < 80) {
           </thead>
 
           <tbody>
-            {results
-  .filter((item) => !showOnlyMatches || item.status !== "Нет в КП")
+           {results
+  .filter((item) => statusFilter === "Все" || item.status === statusFilter)
   .map((item, index) => (
               <tr key={index}>
                 <td className="border p-2">{item.name}</td>
