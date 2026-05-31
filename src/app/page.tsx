@@ -5,6 +5,7 @@ import type { WorkItem, CompareResult } from "./types";
 import { normalizeText } from "./utils";
 import { parseSpecExcel, parseOfferExcel } from "./parsers";
 import { exportResultsToExcel } from "./exportReport";
+import { compareWorkItems } from "./compare";
 
 const findColumn = (row: any, possibleNames: string[]) => {
   const keys = Object.keys(row);
@@ -47,154 +48,10 @@ const [uploadResetKey, setUploadResetKey] = useState(0);
   setStatusFilter("Все");
   setUploadResetKey((prev) => prev + 1);
 };
-
 const compareFiles = () => {
-  const groupedSpecItems: WorkItem[] = Object.values(
-  specItems.reduce((acc, item) => {
-    const key = normalizeText(`${item.name} ${item.rate} ${item.unit}`);
-
-    if (!acc[key]) {
-      acc[key] = { ...item };
-      return acc;
-    }
-
-    acc[key].projectVolume =
-      Number(acc[key].projectVolume || 0) + Number(item.projectVolume || 0);
-
-    return acc;
-  }, {} as Record<string, WorkItem>)
-);
-const groupedOfferItems: WorkItem[] = Object.values(
-  offerItems.reduce((acc, item) => {
-    const key = normalizeText(`${item.name} ${item.rate} ${item.unit}`);
-
-    if (!acc[key]) {
-      acc[key] = { ...item };
-      return acc;
-    }
-
-    acc[key].projectVolume =
-      Number(acc[key].projectVolume || 0) + Number(item.projectVolume || 0);
-
-    return acc;
-  }, {} as Record<string, WorkItem>)
-);
-const comparison: CompareResult[] = groupedSpecItems.map((spec) => {
-    let bestMatch: WorkItem | undefined;
-    let bestSimilarity = 0;
-
-    groupedOfferItems.forEach((offer) => {
-      const specName = normalizeText(`${spec.name} ${spec.rate}`);
-const offerName = normalizeText(`${offer.name} ${offer.rate}`);
-
-      const words = specName.split(" ").filter((word) => word.length > 2);
-
-      const matchedWords = words.filter((word) => offerName.includes(word));
-
-     let similarity =
-  words.length > 0 ? (matchedWords.length / words.length) * 100 : 0;
-
-const specTokens = specName.split(" ");
-const offerTokens = offerName.split(" ");
-
-const importantTokens = specTokens.filter((token) =>
-  /[a-z]+[0-9]+|[0-9]+[a-z]+|[0-9]+x[0-9]+/i.test(token)
-);
-
-const matchedImportantTokens = importantTokens.filter((token) =>
-  offerTokens.includes(token)
-);
-
-similarity += matchedImportantTokens.length * 20;
-const dimensionsSpec =
-  specName.match(/\d+\-\d+|\d+x\d+/g) || [];
-
-const dimensionsOffer =
-  offerName.match(/\d+\-\d+|\d+x\d+/g) || [];
-
-if (
-  dimensionsSpec.length &&
-  dimensionsOffer.length &&
-  dimensionsSpec.join() !== dimensionsOffer.join()
-) {
-  similarity -= 50;
-}
-
-if (similarity > 100) {
-  similarity = 100;
-}
-if (similarity < 0) {
-  similarity = 0;
-}
-
-      if (similarity > bestSimilarity) {
-        bestSimilarity = similarity;
-        bestMatch = offer;
-      }
-    });
-
-    if (!bestMatch || bestSimilarity < 30) {
-     return {
-  name: spec.name,
-  rate: spec.rate,
-  unit: spec.unit,
-  specVolume: spec.projectVolume,
-
-  offerName: "-",
-  offerRate: "-",
-  offerUnit: "-",
-  offerVolume: "-",
-
-  status: "Нет в КП",
-  similarity: bestSimilarity,
-};
-    }
-if (bestSimilarity < 80) {
-  return {
-    name: spec.name,
-    rate: spec.rate,
-    unit: spec.unit,
-    specVolume: spec.projectVolume,
-    offerVolume: bestMatch.projectVolume,
-    offerName: bestMatch.name,
-offerRate: bestMatch.rate,
-offerUnit: bestMatch.unit,
-    status: "Частичное совпадение",
-    similarity: bestSimilarity,
-  };
-}
-    if (Number(spec.projectVolume) !== Number(bestMatch.projectVolume)) {
-      return {
-        name: spec.name,
-        rate: spec.rate,
-        unit: spec.unit,
-        specVolume: spec.projectVolume,
-        offerVolume: bestMatch.projectVolume,
-        offerName: bestMatch.name,
-offerRate: bestMatch.rate,
-offerUnit: bestMatch.unit,
-        status: "Объем отличается",
-        similarity: bestSimilarity,
-      };
-    }
-
-    return {
-      name: spec.name,
-      rate: spec.rate,
-      unit: spec.unit,
-      specVolume: spec.projectVolume,
-      offerVolume: bestMatch.projectVolume,
-      offerName: bestMatch.name,
-offerRate: bestMatch.rate,
-offerUnit: bestMatch.unit,
-      status: "ОК",
-      similarity: bestSimilarity,
-    };
-  });
-
+  const comparison = compareWorkItems(specItems, offerItems);
   setResults(comparison);
 };
-
   const getStatusClass = (status: CompareResult["status"]) => {
     if (status === "ОК") return "text-green-700 bg-green-100";
     if (status === "Объем отличается") return "text-orange-700 bg-orange-100";
