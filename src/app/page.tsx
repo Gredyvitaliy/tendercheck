@@ -3,13 +3,7 @@
 import { useState } from "react";
 import * as XLSX from "xlsx-js-style";
 import type { WorkItem, CompareResult } from "./types";
-
-const normalizeText = (text: string) =>
-  text
-    .toLowerCase()
-    .replace(/[^а-яa-z0-9]/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+import { normalizeText } from "./utils";
 
 const findColumn = (row: any, possibleNames: string[]) => {
   const keys = Object.keys(row);
