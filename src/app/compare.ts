@@ -4,7 +4,12 @@ import { normalizeText } from "./utils";
 const groupWorkItems = (items: WorkItem[]) => {
   return Object.values(
     items.reduce((acc, item) => {
-      const key = normalizeText(`${item.name} ${item.rate} ${item.unit}`);
+      const marks = extractPositionMarks(`${item.name} ${item.rate}`);
+
+      const key =
+  marks.length > 0
+    ? marks[0]
+    : normalizeText(`${item.name} ${item.rate} ${item.unit}`);
 
       if (!acc[key]) {
         acc[key] = { ...item };
@@ -34,6 +39,9 @@ export const compareWorkItems = (
     let bestSimilarity = 0;
 
     groupedOfferItems.forEach((offer, offerIndex) => {
+      if (usedOfferIndexes.has(offerIndex)) {
+  return;
+}
       const specName = normalizeText(`${spec.name} ${spec.rate}`);
       const offerName = normalizeText(`${offer.name} ${offer.rate}`);
 
@@ -95,22 +103,22 @@ export const compareWorkItems = (
       }
     });
 
-    if (!bestMatch || bestSimilarity < 30) {
-      return {
-        name: spec.name,
-        rate: spec.rate,
-        unit: spec.unit,
-        specVolume: spec.projectVolume,
+   if (!bestMatch || bestSimilarity < 50) {
+  return {
+    name: spec.name,
+    rate: spec.rate,
+    unit: spec.unit,
+    specVolume: spec.projectVolume,
 
-        offerName: bestMatch ? bestMatch.name : "-",
-        offerRate: bestMatch ? bestMatch.rate : "-",
-        offerUnit: bestMatch ? bestMatch.unit : "-",
-        offerVolume: bestMatch ? bestMatch.projectVolume : "-",
+    offerName: "-",
+    offerRate: "-",
+    offerUnit: "-",
+    offerVolume: "-",
 
-        status: "Нет в КП",
-        similarity: bestSimilarity,
-      };
-    }
+    status: "Нет в КП",
+    similarity: 0,
+  };
+}
 
     usedOfferIndexes.add(bestMatchIndex);
 
@@ -184,16 +192,34 @@ export const compareWorkItems = (
   return [...comparison, ...extraOfferItems];
 };
 const extractPositionMarks = (text: string) => {
-  return (
-    String(text)
+  const normalized = String(text)
+    .toLowerCase()
+    .replace(/[–—]/g, "-");
+
+  const matches =
+    normalized.match(/(?:вп|bp|в|b)\s*[-]?\s*\d+/gi) || [];
+
+  return matches.map((mark) => {
+    let cleaned = mark
       .toLowerCase()
-      .replace(/в/g, "b")
-      .match(/b\s*[-–—]?\s*\d+[а-яa-z0-9()]*/gi)
-      ?.map((mark) =>
-        mark
-          .replace(/\s+/g, "")
-          .replace(/[–—]/g, "-")
-          .replace(/^b(?!-)/, "b-")
-      ) || []
-  );
+      .replace(/\s+/g, "")
+      .replace(/[–—]/g, "-");
+
+    cleaned = cleaned.replace(/^вп/, "bp");
+    cleaned = cleaned.replace(/^в/, "b");
+
+    if (cleaned.startsWith("bp") && !cleaned.startsWith("bp-")) {
+      cleaned = cleaned.replace(/^bp/, "bp-");
+    }
+
+    if (
+      cleaned.startsWith("b") &&
+      !cleaned.startsWith("b-") &&
+      !cleaned.startsWith("bp-")
+    ) {
+      cleaned = cleaned.replace(/^b/, "b-");
+    }
+
+    return cleaned;
+  });
 };

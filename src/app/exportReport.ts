@@ -13,7 +13,9 @@ const getStatusComment = (item: CompareResult) => {
   if (item.status === "Частичное совпадение") {
     return "Найдена похожая позиция. Требуется ручная проверка наименования, модели или характеристик.";
   }
-
+if (item.status === "Есть в КП, нет в спецификации") {
+  return "В КП есть дополнительная позиция, которой нет в спецификации. Требуется проверить: это допработа, лишняя строка или ошибка подрядчика.";
+}
   return "Позиция из спецификации не найдена в КП.";
 };
 export const exportResultsToExcel = (results: CompareResult[]) => {
@@ -37,6 +39,12 @@ export const exportResultsToExcel = (results: CompareResult[]) => {
       Статус: "Нет в КП",
       Количество: results.filter((item) => item.status === "Нет в КП").length,
     },
+    {
+  Статус: "Есть в КП, нет в спецификации",
+  Количество: results.filter(
+    (item) => item.status === "Есть в КП, нет в спецификации"
+  ).length,
+},
   ];
 
   const exportData = results.map((item) => ({
@@ -154,6 +162,10 @@ export const exportResultsToExcel = (results: CompareResult[]) => {
       fillColor = "FEE2E2";
       fontColor = "991B1B";
     }
+    if (status === "Есть в КП, нет в спецификации") {
+  fillColor = "DBEAFE";
+  fontColor = "1D4ED8";
+}
 
     for (let col = range.s.c; col <= range.e.c; col++) {
       const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
