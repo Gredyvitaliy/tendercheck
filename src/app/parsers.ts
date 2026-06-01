@@ -78,9 +78,9 @@ export function parseSpecExcel(file: File, callback: (items: WorkItem[]) => void
         : 1;
 
     const markIndex =
-      findColumnIndex(headerRow, ["марка", "позиция"]) >= 0
-        ? findColumnIndex(headerRow, ["марка", "позиция"])
-        : 0;
+  findColumnIndex(headerRow, ["марка"]) >= 0
+    ? findColumnIndex(headerRow, ["марка"])
+    : -1;
 
     const modelIndex =
       findColumnIndex(headerRow, ["обозначение", "модель", "артикул", "расценка"]) >= 0
@@ -105,8 +105,14 @@ export function parseSpecExcel(file: File, callback: (items: WorkItem[]) => void
         if (!Array.isArray(row)) return null;
 
         const name = String(row[nameIndex] || "").trim();
-        const mark = String(row[markIndex] || "").trim();
-        const model = String(row[modelIndex] || "").trim();
+
+const rawMark = String(row[markIndex] || "").trim();
+
+const mark = /^\d+([.,]0+)?$/.test(rawMark)
+  ? `В-${rawMark.replace(/[.,]0+$/, "")}`
+  : rawMark;
+
+const model = String(row[modelIndex] || "").trim();
 
         const quantityRaw = row[quantityIndex];
         const quantityNumber = parseQuantity(quantityRaw);
@@ -128,7 +134,12 @@ export function parseSpecExcel(file: File, callback: (items: WorkItem[]) => void
         return {
           number: index,
           name,
-          rate: [mark, model].filter(Boolean).join(" "),
+          rate: [
+  /^\d+([.,]0+)?$/.test(String(row[markIndex] ?? "").trim())
+    ? `В-${String(row[markIndex] ?? "").trim().replace(/[.,]0+$/, "")}`
+    : String(row[markIndex] ?? "").trim(),
+  model,
+].filter(Boolean).join(" "),
           unit,
           projectVolume: quantityNumber,
           rowType: "item",
@@ -158,7 +169,9 @@ export function parseOfferExcel(file: File, callback: (items: WorkItem[]) => voi
       return rawData.findIndex((row) => {
         if (!Array.isArray(row)) return false;
 
-        const rowText = row.map((cell) => normalizeText(String(cell || ""))).join(" ");
+        const rowText = row
+          .map((cell) => normalizeText(String(cell || "")))
+          .join(" ");
 
         return (
           rowText.includes("наименование") &&
@@ -207,6 +220,39 @@ export function parseOfferExcel(file: File, callback: (items: WorkItem[]) => voi
       return "";
     };
 
+    const extractMarkFromText = (value: any) => {
+  const text = String(value || "").replace(/[–—]/g, "-");
+
+  const match = text.match(
+    /(?:^|[^а-яa-z0-9])((?:ВП|BP|В|B|ПД|PD)\s*[-]?\s*\d+)/i
+  );
+
+  if (!match) return "";
+
+  let cleaned = match[1]
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/[–—]/g, "-");
+
+  cleaned = cleaned.replace(/^BP/, "ВП");
+  cleaned = cleaned.replace(/^B/, "В");
+  cleaned = cleaned.replace(/^PD/, "ПД");
+
+  if (/^ВП\d/.test(cleaned)) {
+    cleaned = cleaned.replace(/^ВП/, "ВП-");
+  }
+
+  if (/^ПД\d/.test(cleaned)) {
+    cleaned = cleaned.replace(/^ПД/, "ПД-");
+  }
+
+  if (/^В\d/.test(cleaned)) {
+    cleaned = cleaned.replace(/^В/, "В-");
+  }
+
+  return cleaned;
+};
+
     const headerRowIndex = findHeaderRowIndex();
 
     const headerRow =
@@ -219,10 +265,11 @@ export function parseOfferExcel(file: File, callback: (items: WorkItem[]) => voi
         ? findColumnIndex(headerRow, ["наименование", "наименование работы"])
         : 1;
 
+    // Важно: не ищем "№" и "позиция", потому что это часто просто номер строки.
     const markIndex =
-      findColumnIndex(headerRow, ["марка", "позиция", "поз", "№"]) >= 0
-        ? findColumnIndex(headerRow, ["марка", "позиция", "поз", "№"])
-        : 0;
+      findColumnIndex(headerRow, ["марка"]) >= 0
+        ? findColumnIndex(headerRow, ["марка"])
+        : -1;
 
     const modelIndex =
       findColumnIndex(headerRow, ["обозначение", "модель", "артикул", "гост"]) >= 0
@@ -244,45 +291,51 @@ export function parseOfferExcel(file: File, callback: (items: WorkItem[]) => voi
         if (!Array.isArray(row)) return null;
 
         const name = String(row[nameIndex] || "").trim();
-const mark = String(row[markIndex] || "").trim();
-const model = String(row[modelIndex] || "").trim();
 
-const quantityRaw = row[quantityIndex];
-const quantityNumber = parseQuantity(quantityRaw);
+        const rawMark =
+          markIndex >= 0 ? String(row[markIndex] || "").trim() : "";
 
-const normalizedName = normalizeText(name);
-const normalizedMark = normalizeText(mark);
+        const markFromName = extractMarkFromText(name);
+        const markFromColumn = extractMarkFromText(rawMark);
 
-if (!name) return null;
-if (quantityNumber === null) return null;
+        const offerMark = markFromName || markFromColumn || rawMark;
 
-// пропускаем шапки и служебные строки
-if (
-  normalizedName.includes("итого") ||
-  normalizedName.includes("сумма") ||
-  normalizedName.includes("стоимость") ||
-  normalizedName.includes("доставка") ||
-  normalizedName.includes("условия") ||
-  normalizedName.includes("ндс") ||
-  normalizedName.includes("коммерческое предложение") ||
-  normalizedName.includes("наименование")
-) {
-  return null;
-}
+        const model = String(row[modelIndex] || "").trim();
 
-// пропускаем строки, где в колонке марки случайно попала шапка
-if (
-  normalizedMark.includes("марка") ||
-  normalizedMark.includes("позиция") ||
-  normalizedMark.includes("поз")
-) {
-  return null;
-}
+        const quantityRaw = row[quantityIndex];
+        const quantityNumber = parseQuantity(quantityRaw);
+
+        const normalizedName = normalizeText(name);
+        const normalizedMark = normalizeText(offerMark);
+
+        if (!name) return null;
+        if (quantityNumber === null) return null;
+
+        if (
+          normalizedName.includes("итого") ||
+          normalizedName.includes("сумма") ||
+          normalizedName.includes("стоимость") ||
+          normalizedName.includes("доставка") ||
+          normalizedName.includes("условия") ||
+          normalizedName.includes("ндс") ||
+          normalizedName.includes("коммерческое предложение") ||
+          normalizedName.includes("наименование")
+        ) {
+          return null;
+        }
+
+        if (
+          normalizedMark.includes("марка") ||
+          normalizedMark.includes("позиция") ||
+          normalizedMark.includes("поз")
+        ) {
+          return null;
+        }
 
         return {
           number: index,
           name,
-          rate: [mark, model].filter(Boolean).join(" "),
+          rate: [offerMark, model].filter(Boolean).join(" "),
           unit: unitFromQuantityHeader || "шт",
           projectVolume: quantityNumber,
           rowType: "item",
@@ -290,7 +343,7 @@ if (
       })
       .filter(Boolean) as WorkItem[];
 
-      callback(normalized);
+    callback(normalized);
   };
 
   reader.readAsBinaryString(file);

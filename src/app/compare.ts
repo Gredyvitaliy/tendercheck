@@ -1,15 +1,29 @@
 import type { WorkItem, CompareResult } from "./types";
 import { normalizeText } from "./utils";
+import { extractItemFeatures } from "./itemFeatures";
+const getPrimaryMark = (item: WorkItem) => {
+  const rateFeatures = extractItemFeatures(item.rate || "");
+
+  if (rateFeatures.marks.length > 0) {
+    return rateFeatures.marks[0];
+  }
+
+  const nameFeatures = extractItemFeatures(item.name || "");
+
+  return nameFeatures.marks[nameFeatures.marks.length - 1] || "";
+};
 
 const groupWorkItems = (items: WorkItem[]) => {
   return Object.values(
     items.reduce((acc, item) => {
-      const marks = extractPositionMarks(`${item.name} ${item.rate}`);
+      const features = extractItemFeatures(item);
 
-      const key =
-  marks.length > 0
-    ? marks[0]
-    : normalizeText(`${item.name} ${item.rate} ${item.unit}`);
+      const mark = getPrimaryMark(item);
+      const itemType = features.itemType || "";
+
+      const key = mark
+        ? normalizeText(`${itemType} ${mark}`)
+        : normalizeText(`${item.name} ${item.rate} ${item.unit}`);
 
       if (!acc[key]) {
         acc[key] = { ...item };
@@ -38,12 +52,35 @@ export const compareWorkItems = (
     let bestMatchIndex = -1;
     let bestSimilarity = 0;
 
-    groupedOfferItems.forEach((offer, offerIndex) => {
-      if (usedOfferIndexes.has(offerIndex)) {
-  return;
-}
-      const specName = normalizeText(`${spec.name} ${spec.rate}`);
-      const offerName = normalizeText(`${offer.name} ${offer.rate}`);
+   groupedOfferItems.forEach((offer, offerIndex) => {
+  if (usedOfferIndexes.has(offerIndex)) {
+    return;
+  }
+
+  const specFeatures = extractItemFeatures(spec);
+  const offerFeatures = extractItemFeatures(offer);
+
+  const specPrimaryMark = getPrimaryMark(spec);
+  const offerPrimaryMark = getPrimaryMark(offer);
+
+  if (
+    specPrimaryMark &&
+    offerPrimaryMark &&
+    specPrimaryMark !== offerPrimaryMark
+  ) {
+    return;
+  }
+
+  if (
+    specFeatures.itemType !== "прочее" &&
+    offerFeatures.itemType !== "прочее" &&
+    specFeatures.itemType !== offerFeatures.itemType
+  ) {
+    return;
+  }
+
+  const specName = normalizeText(`${spec.name} ${spec.rate}`);
+  const offerName = normalizeText(`${offer.name} ${offer.rate}`);
 
       const words = specName.split(" ").filter((word) => word.length > 2);
       const matchedWords = words.filter((word) => offerName.includes(word));
@@ -62,39 +99,31 @@ export const compareWorkItems = (
         offerTokens.includes(token)
       );
 
-      similarity += matchedImportantTokens.length * 20;
+     similarity += matchedImportantTokens.length * 20;
 
-      const specMarks = extractPositionMarks(`${spec.name} ${spec.rate}`);
-      const offerMarks = extractPositionMarks(`${offer.name} ${offer.rate}`);
+if (specPrimaryMark && offerPrimaryMark && specPrimaryMark === offerPrimaryMark) {
+  similarity += 60;
+}
 
-      if (specMarks.length && offerMarks.length) {
-        const hasSameMark = specMarks.some((mark) => offerMarks.includes(mark));
+if (specFeatures.dimensions.length && offerFeatures.dimensions.length) {
+  const hasSameDimension = specFeatures.dimensions.some((dimension) =>
+    offerFeatures.dimensions.includes(dimension)
+  );
 
-        if (hasSameMark) {
-          similarity += 40;
-        } else {
-          similarity -= 60;
-        }
-      }
+  if (hasSameDimension) {
+    similarity += 30;
+  } else {
+    similarity -= 80;
+  }
+}
 
-      const dimensionsSpec = specName.match(/\d+\-\d+|\d+x\d+/g) || [];
-      const dimensionsOffer = offerName.match(/\d+\-\d+|\d+x\d+/g) || [];
+if (similarity > 100) {
+  similarity = 100;
+}
 
-      if (
-        dimensionsSpec.length &&
-        dimensionsOffer.length &&
-        dimensionsSpec.join() !== dimensionsOffer.join()
-      ) {
-        similarity -= 50;
-      }
-
-      if (similarity > 100) {
-        similarity = 100;
-      }
-
-      if (similarity < 0) {
-        similarity = 0;
-      }
+if (similarity < 0) {
+  similarity = 0;
+}
 
       if (similarity > bestSimilarity) {
         bestSimilarity = similarity;
@@ -121,6 +150,68 @@ export const compareWorkItems = (
 }
 
     usedOfferIndexes.add(bestMatchIndex);
+    const finalSpecFeatures = extractItemFeatures(spec);
+const finalOfferFeatures = extractItemFeatures(bestMatch);
+console.log("FINAL FEATURES CHECK", {
+  specName: spec.name,
+  specRate: spec.rate,
+  offerName: bestMatch.name,
+  offerRate: bestMatch.rate,
+  specMarks: finalSpecFeatures.marks,
+  offerMarks: finalOfferFeatures.marks,
+  specDimensions: finalSpecFeatures.dimensions,
+  offerDimensions: finalOfferFeatures.dimensions,
+});
+const finalSpecPrimaryMark = getPrimaryMark(spec);
+const finalOfferPrimaryMark = getPrimaryMark(bestMatch);
+
+const hasSameFinalMark =
+  finalSpecPrimaryMark &&
+  finalOfferPrimaryMark &&
+  finalSpecPrimaryMark === finalOfferPrimaryMark;
+
+const hasDifferentDimensions =
+  finalSpecFeatures.dimensions.length > 0 &&
+  finalOfferFeatures.dimensions.length > 0 &&
+  !finalSpecFeatures.dimensions.some((dimension) =>
+    finalOfferFeatures.dimensions.includes(dimension)
+  );
+if (hasDifferentDimensions) {
+  return {
+    name: spec.name,
+    rate: spec.rate,
+    unit: spec.unit,
+    specVolume: spec.projectVolume,
+
+    offerName: bestMatch.name,
+    offerRate: bestMatch.rate,
+    offerUnit: bestMatch.unit,
+    offerVolume: bestMatch.projectVolume,
+
+    status: "Размер отличается",
+    similarity: bestSimilarity,
+  };
+}
+if (
+  hasSameFinalMark &&
+  !hasDifferentDimensions &&
+  Number(spec.projectVolume) === Number(bestMatch.projectVolume)
+) {
+  return {
+    name: spec.name,
+    rate: spec.rate,
+    unit: spec.unit,
+    specVolume: spec.projectVolume,
+
+    offerName: bestMatch.name,
+    offerRate: bestMatch.rate,
+    offerUnit: bestMatch.unit,
+    offerVolume: bestMatch.projectVolume,
+
+    status: "ОК",
+    similarity: 100,
+  };
+}
 
     if (bestSimilarity < 80) {
       return {
@@ -190,36 +281,4 @@ export const compareWorkItems = (
     }));
 
   return [...comparison, ...extraOfferItems];
-};
-const extractPositionMarks = (text: string) => {
-  const normalized = String(text)
-    .toLowerCase()
-    .replace(/[–—]/g, "-");
-
-  const matches =
-    normalized.match(/(?:вп|bp|в|b)\s*[-]?\s*\d+/gi) || [];
-
-  return matches.map((mark) => {
-    let cleaned = mark
-      .toLowerCase()
-      .replace(/\s+/g, "")
-      .replace(/[–—]/g, "-");
-
-    cleaned = cleaned.replace(/^вп/, "bp");
-    cleaned = cleaned.replace(/^в/, "b");
-
-    if (cleaned.startsWith("bp") && !cleaned.startsWith("bp-")) {
-      cleaned = cleaned.replace(/^bp/, "bp-");
-    }
-
-    if (
-      cleaned.startsWith("b") &&
-      !cleaned.startsWith("b-") &&
-      !cleaned.startsWith("bp-")
-    ) {
-      cleaned = cleaned.replace(/^b/, "b-");
-    }
-
-    return cleaned;
-  });
 };

@@ -10,6 +10,10 @@ const getStatusComment = (item: CompareResult) => {
     return "Позиция найдена, но объем по спецификации отличается от объема в КП.";
   }
 
+  if (item.status === "Размер отличается") {
+  return "Позиция найдена в КП, но размер отличается. Требуется проверить габариты/характеристики.";
+}
+
   if (item.status === "Частичное совпадение") {
     return "Найдена похожая позиция. Требуется ручная проверка наименования, модели или характеристик.";
   }
@@ -29,6 +33,10 @@ export const exportResultsToExcel = (results: CompareResult[]) => {
       Количество: results.filter((item) => item.status === "Объем отличается")
         .length,
     },
+    {
+  Статус: "Размер отличается",
+  Количество: results.filter((item) => item.status === "Размер отличается").length,
+},
     {
       Статус: "Частичное совпадение",
       Количество: results.filter(
@@ -152,6 +160,10 @@ export const exportResultsToExcel = (results: CompareResult[]) => {
       fillColor = "FFEDD5";
       fontColor = "9A3412";
     }
+    if (status === "Размер отличается") {
+  fillColor = "EDE9FE";
+  fontColor = "6D28D9";
+}
 
     if (status === "Частичное совпадение") {
       fillColor = "FEF9C3";

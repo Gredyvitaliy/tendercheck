@@ -55,6 +55,8 @@ const compareFiles = () => {
   const getStatusClass = (status: CompareResult["status"]) => {
     if (status === "ОК") return "text-green-700 bg-green-100";
     if (status === "Объем отличается") return "text-orange-700 bg-orange-100";
+    if (status === "Размер отличается")
+  return "text-purple-700 bg-purple-100";
     if (status === "Частичное совпадение") return "text-yellow-700 bg-yellow-100";
     if (status === "Есть в КП, нет в спецификации")
   return "text-blue-700 bg-blue-100";
