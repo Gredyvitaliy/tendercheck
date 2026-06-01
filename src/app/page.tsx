@@ -56,6 +56,8 @@ const compareFiles = () => {
     if (status === "ОК") return "text-green-700 bg-green-100";
     if (status === "Объем отличается") return "text-orange-700 bg-orange-100";
     if (status === "Частичное совпадение") return "text-yellow-700 bg-yellow-100";
+    if (status === "Есть в КП, нет в спецификации")
+  return "text-blue-700 bg-blue-100";
     return "text-red-700 bg-red-100";
   };
   const okCount = results.filter(
@@ -72,6 +74,9 @@ const partialCount = results.filter(
 
 const missingCount = results.filter(
   (item) => item.status === "Нет в КП"
+).length;
+const extraOfferCount = results.filter(
+  (item) => item.status === "Есть в КП, нет в спецификации"
 ).length;
 const filteredResults = results
   .filter((item) => statusFilter === "Все" || item.status === statusFilter)
@@ -185,7 +190,7 @@ const filteredResults = results
 <div className="mb-4 text-sm text-gray-600">
   Найдено строк: {filteredResults.length} из {results.length}
 </div>
-          <div className="mb-4 flex gap-2 flex-wrap">
+  <div className="mb-4 flex gap-2 flex-wrap">
   <button
     onClick={() => setStatusFilter("Все")}
     className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded-lg text-sm font-semibold"
@@ -220,6 +225,13 @@ const filteredResults = results
   >
     Нет в КП
   </button>
+
+  <button
+    onClick={() => setStatusFilter("Есть в КП, нет в спецификации")}
+    className="bg-blue-100 hover:bg-blue-200 text-blue-800 px-4 py-2 rounded-lg text-sm font-semibold"
+  >
+    Лишнее в КП
+  </button>
 </div>
   <div className="bg-green-50 text-green-800 rounded-xl p-4 font-semibold">
     ✅ ОК: {okCount}
@@ -236,6 +248,9 @@ const filteredResults = results
   <div className="bg-red-50 text-red-800 rounded-xl p-4 font-semibold">
     ❌ Нет в КП: {missingCount}
   </div>
+  <div className="bg-blue-50 text-blue-800 rounded-xl p-4 font-semibold">
+  🔵 Лишнее в КП: {extraOfferCount}
+</div>
 </div>
 
         <table className="w-full border-collapse text-sm">
@@ -245,9 +260,11 @@ const filteredResults = results
               <th className="border p-2">Расценка</th>
               <th className="border p-2">Ед. изм.</th>
               <th className="border p-2">Объем по спецификации</th>
-              <th className="border p-2">Объем по КП</th>
-              <th className="border p-2">Совпадение</th>
-              <th className="border p-2">Статус</th>
+              <th className="border p-2">Позиция в КП</th>
+<th className="border p-2">Модель / артикул КП</th>
+<th className="border p-2">Объем по КП</th>
+<th className="border p-2">Совпадение</th>
+<th className="border p-2">Статус</th>
             </tr>
           </thead>
 
@@ -258,8 +275,10 @@ const filteredResults = results
                 <td className="border p-2">{item.rate}</td>
                 <td className="border p-2">{item.unit}</td>
                 <td className="border p-2">{item.specVolume}</td>
-                <td className="border p-2">{item.offerVolume}</td>
-                <td className="border p-2">
+                <td className="border p-2">{item.offerName}</td>
+<td className="border p-2">{item.offerRate}</td>
+<td className="border p-2">{item.offerVolume}</td>
+<td className="border p-2">
   {item.similarity ? `${Math.round(item.similarity)}%` : "-"}
 </td>
                 <td className="border p-2">

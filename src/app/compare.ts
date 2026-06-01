@@ -26,11 +26,14 @@ export const compareWorkItems = (
   const groupedSpecItems = groupWorkItems(specItems);
   const groupedOfferItems = groupWorkItems(offerItems);
 
-  return groupedSpecItems.map((spec) => {
+  const usedOfferIndexes = new Set<number>();
+
+  const comparison: CompareResult[] = groupedSpecItems.map((spec) => {
     let bestMatch: WorkItem | undefined;
+    let bestMatchIndex = -1;
     let bestSimilarity = 0;
 
-    groupedOfferItems.forEach((offer) => {
+    groupedOfferItems.forEach((offer, offerIndex) => {
       const specName = normalizeText(`${spec.name} ${spec.rate}`);
       const offerName = normalizeText(`${offer.name} ${offer.rate}`);
 
@@ -52,6 +55,19 @@ export const compareWorkItems = (
       );
 
       similarity += matchedImportantTokens.length * 20;
+
+      const specMarks = extractPositionMarks(`${spec.name} ${spec.rate}`);
+      const offerMarks = extractPositionMarks(`${offer.name} ${offer.rate}`);
+
+      if (specMarks.length && offerMarks.length) {
+        const hasSameMark = specMarks.some((mark) => offerMarks.includes(mark));
+
+        if (hasSameMark) {
+          similarity += 40;
+        } else {
+          similarity -= 60;
+        }
+      }
 
       const dimensionsSpec = specName.match(/\d+\-\d+|\d+x\d+/g) || [];
       const dimensionsOffer = offerName.match(/\d+\-\d+|\d+x\d+/g) || [];
@@ -75,6 +91,7 @@ export const compareWorkItems = (
       if (similarity > bestSimilarity) {
         bestSimilarity = similarity;
         bestMatch = offer;
+        bestMatchIndex = offerIndex;
       }
     });
 
@@ -85,15 +102,17 @@ export const compareWorkItems = (
         unit: spec.unit,
         specVolume: spec.projectVolume,
 
-        offerName: "-",
-        offerRate: "-",
-        offerUnit: "-",
-        offerVolume: "-",
+        offerName: bestMatch ? bestMatch.name : "-",
+        offerRate: bestMatch ? bestMatch.rate : "-",
+        offerUnit: bestMatch ? bestMatch.unit : "-",
+        offerVolume: bestMatch ? bestMatch.projectVolume : "-",
 
         status: "Нет в КП",
         similarity: bestSimilarity,
       };
     }
+
+    usedOfferIndexes.add(bestMatchIndex);
 
     if (bestSimilarity < 80) {
       return {
@@ -144,4 +163,37 @@ export const compareWorkItems = (
       similarity: bestSimilarity,
     };
   });
+
+  const extraOfferItems: CompareResult[] = groupedOfferItems
+    .filter((_, offerIndex) => !usedOfferIndexes.has(offerIndex))
+    .map((offer) => ({
+      name: "-",
+      rate: "-",
+      unit: "-",
+      specVolume: "-",
+
+      offerName: offer.name,
+      offerRate: offer.rate,
+      offerUnit: offer.unit,
+      offerVolume: offer.projectVolume,
+
+      status: "Есть в КП, нет в спецификации",
+      similarity: 0,
+    }));
+
+  return [...comparison, ...extraOfferItems];
+};
+const extractPositionMarks = (text: string) => {
+  return (
+    String(text)
+      .toLowerCase()
+      .replace(/в/g, "b")
+      .match(/b\s*[-–—]?\s*\d+[а-яa-z0-9()]*/gi)
+      ?.map((mark) =>
+        mark
+          .replace(/\s+/g, "")
+          .replace(/[–—]/g, "-")
+          .replace(/^b(?!-)/, "b-")
+      ) || []
+  );
 };

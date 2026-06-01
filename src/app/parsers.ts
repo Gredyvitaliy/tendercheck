@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx-js-style";
 import type { WorkItem } from "./types";
+import { normalizeText } from "./utils";
 
 export function parseSpecExcel(file: File, callback: (items: WorkItem[]) => void) {
   const reader = new FileReader();
@@ -11,41 +12,129 @@ export function parseSpecExcel(file: File, callback: (items: WorkItem[]) => void
     const worksheet = workbook.Sheets[sheetName];
 
     const rawData: any[] = XLSX.utils.sheet_to_json(worksheet, {
-  header: 1,
-});
-const normalized: WorkItem[] = rawData
-  .map((row, index) => {
-    if (!Array.isArray(row)) return null;
+      header: 1,
+    });
 
-    const name = String(row[1] || "").trim();
-    const model = String(row[2] || "").trim();
-    const unit = String(row[12] || "").trim();
-    const quantityRaw = row[13];
-const quantityNumber = Number(
-  String(quantityRaw || "").replace(",", ".").trim()
-);
+    const findHeaderRowIndex = () => {
+      return rawData.findIndex((row) => {
+        if (!Array.isArray(row)) return false;
 
-if (!name) return null;
+        const rowText = row.map((cell) => normalizeText(String(cell || ""))).join(" ");
 
-if (!unit) return null;
-
-if (!quantityRaw || Number.isNaN(quantityNumber)) return null;
-
-    // пропускаем разделы вида 3.1.1
-    if (/^\d+(\.\d+)+/.test(name)) {
-  return null;
-}
-
-    return {
-      number: index,
-      name,
-      rate: model,
-      unit,
-     projectVolume: quantityNumber,
-rowType: "item",
+        return (
+          rowText.includes("наименование") &&
+          (rowText.includes("кол") ||
+            rowText.includes("количество") ||
+            rowText.includes("объем") ||
+            rowText.includes("объём"))
+        );
+      });
     };
-  })
-  .filter(Boolean) as WorkItem[];
+
+    const findColumnIndex = (headerRow: any[], possibleNames: string[]) => {
+      return headerRow.findIndex((cell) => {
+        const normalizedCell = normalizeText(String(cell || ""));
+
+        return possibleNames.some((name) =>
+          normalizedCell.includes(normalizeText(name))
+        );
+      });
+    };
+
+    const parseQuantity = (value: any) => {
+      const text = String(value || "").replace(",", ".").trim();
+
+      if (!text) return null;
+
+      const match = text.match(/\d+(\.\d+)?/);
+
+      if (!match) return null;
+
+      const quantity = Number(match[0]);
+
+      if (Number.isNaN(quantity)) return null;
+
+      return quantity;
+    };
+
+    const extractUnitFromQuantity = (value: any) => {
+      const text = String(value || "").trim();
+
+      const unitMatch = text.match(/[а-яa-zм²㎡]+/i);
+
+      return unitMatch ? unitMatch[0] : "";
+    };
+
+    const headerRowIndex = findHeaderRowIndex();
+
+    const headerRow =
+      headerRowIndex >= 0 && Array.isArray(rawData[headerRowIndex])
+        ? rawData[headerRowIndex]
+        : [];
+
+    const nameIndex =
+      findColumnIndex(headerRow, ["наименование", "наименование работы"]) >= 0
+        ? findColumnIndex(headerRow, ["наименование", "наименование работы"])
+        : 1;
+
+    const markIndex =
+      findColumnIndex(headerRow, ["марка", "позиция"]) >= 0
+        ? findColumnIndex(headerRow, ["марка", "позиция"])
+        : 0;
+
+    const modelIndex =
+      findColumnIndex(headerRow, ["обозначение", "модель", "артикул", "расценка"]) >= 0
+        ? findColumnIndex(headerRow, ["обозначение", "модель", "артикул", "расценка"])
+        : 2;
+
+    const unitIndex =
+      findColumnIndex(headerRow, ["ед изм", "единица", "ед. изм"]) >= 0
+        ? findColumnIndex(headerRow, ["ед изм", "единица", "ед. изм"])
+        : -1;
+
+    const quantityIndex =
+      findColumnIndex(headerRow, ["кол", "количество", "объем", "объём", "к во"]) >= 0
+        ? findColumnIndex(headerRow, ["кол", "количество", "объем", "объём", "к во"])
+        : 13;
+
+    const dataStartIndex = headerRowIndex >= 0 ? headerRowIndex + 1 : 1;
+
+    const normalized: WorkItem[] = rawData
+      .slice(dataStartIndex)
+      .map((row, index) => {
+        if (!Array.isArray(row)) return null;
+
+        const name = String(row[nameIndex] || "").trim();
+        const mark = String(row[markIndex] || "").trim();
+        const model = String(row[modelIndex] || "").trim();
+
+        const quantityRaw = row[quantityIndex];
+        const quantityNumber = parseQuantity(quantityRaw);
+
+        const unitFromColumn =
+          unitIndex >= 0 ? String(row[unitIndex] || "").trim() : "";
+
+        const unitFromQuantity = extractUnitFromQuantity(quantityRaw);
+
+        const unit = unitFromColumn || unitFromQuantity || "шт";
+
+        if (!name) return null;
+        if (quantityNumber === null) return null;
+
+        if (/^\d+(\.\d+)+$/.test(name)) {
+          return null;
+        }
+
+        return {
+          number: index,
+          name,
+          rate: [mark, model].filter(Boolean).join(" "),
+          unit,
+          projectVolume: quantityNumber,
+          rowType: "item",
+        };
+      })
+      .filter(Boolean) as WorkItem[];
 
     callback(normalized);
   };
@@ -62,30 +151,146 @@ export function parseOfferExcel(file: File, callback: (items: WorkItem[]) => voi
     const worksheet = workbook.Sheets[sheetName];
 
     const rawData: any[] = XLSX.utils.sheet_to_json(worksheet, {
-  header: 1,
-});
-const normalized: WorkItem[] = rawData
-  .map((row, index) => {
-    if (!Array.isArray(row)) return null;
+      header: 1,
+    });
 
-    const name = String(row[2] || "").trim();
-    const unit = String(row[3] || "").trim();
-    const quantity = row[4] || "";
+    const findHeaderRowIndex = () => {
+      return rawData.findIndex((row) => {
+        if (!Array.isArray(row)) return false;
 
-    if (!name) return null;
+        const rowText = row.map((cell) => normalizeText(String(cell || ""))).join(" ");
 
-    return {
-      number: index,
-      name,
-      rate: "",
-      unit,
-      projectVolume: quantity,
-      rowType: "item",
+        return (
+          rowText.includes("наименование") &&
+          (rowText.includes("кол") ||
+            rowText.includes("количество") ||
+            rowText.includes("объем") ||
+            rowText.includes("объём"))
+        );
+      });
     };
-  })
-  .filter(Boolean) as WorkItem[];
 
-callback(normalized);
+    const findColumnIndex = (headerRow: any[], possibleNames: string[]) => {
+      return headerRow.findIndex((cell) => {
+        const normalizedCell = normalizeText(String(cell || ""));
+
+        return possibleNames.some((name) =>
+          normalizedCell.includes(normalizeText(name))
+        );
+      });
+    };
+
+    const parseQuantity = (value: any) => {
+      const text = String(value || "").replace(",", ".").trim();
+
+      if (!text) return null;
+
+      const match = text.match(/\d+(\.\d+)?/);
+
+      if (!match) return null;
+
+      const quantity = Number(match[0]);
+
+      if (Number.isNaN(quantity)) return null;
+
+      return quantity;
+    };
+
+    const extractUnitFromHeader = (value: any) => {
+      const text = String(value || "").toLowerCase();
+
+      if (text.includes("шт")) return "шт";
+      if (text.includes("м2") || text.includes("м²")) return "м²";
+      if (text.includes("м3") || text.includes("м³")) return "м³";
+      if (text.includes("м")) return "м";
+
+      return "";
+    };
+
+    const headerRowIndex = findHeaderRowIndex();
+
+    const headerRow =
+      headerRowIndex >= 0 && Array.isArray(rawData[headerRowIndex])
+        ? rawData[headerRowIndex]
+        : [];
+
+    const nameIndex =
+      findColumnIndex(headerRow, ["наименование", "наименование работы"]) >= 0
+        ? findColumnIndex(headerRow, ["наименование", "наименование работы"])
+        : 1;
+
+    const markIndex =
+      findColumnIndex(headerRow, ["марка", "позиция", "поз", "№"]) >= 0
+        ? findColumnIndex(headerRow, ["марка", "позиция", "поз", "№"])
+        : 0;
+
+    const modelIndex =
+      findColumnIndex(headerRow, ["обозначение", "модель", "артикул", "гост"]) >= 0
+        ? findColumnIndex(headerRow, ["обозначение", "модель", "артикул", "гост"])
+        : 2;
+
+    const quantityIndex =
+      findColumnIndex(headerRow, ["кол", "количество", "к во"]) >= 0
+        ? findColumnIndex(headerRow, ["кол", "количество", "к во"])
+        : 3;
+
+    const unitFromQuantityHeader = extractUnitFromHeader(headerRow[quantityIndex]);
+
+    const dataStartIndex = headerRowIndex >= 0 ? headerRowIndex + 1 : 1;
+
+    const normalized: WorkItem[] = rawData
+      .slice(dataStartIndex)
+      .map((row, index) => {
+        if (!Array.isArray(row)) return null;
+
+        const name = String(row[nameIndex] || "").trim();
+const mark = String(row[markIndex] || "").trim();
+const model = String(row[modelIndex] || "").trim();
+
+const quantityRaw = row[quantityIndex];
+const quantityNumber = parseQuantity(quantityRaw);
+
+const normalizedName = normalizeText(name);
+const normalizedMark = normalizeText(mark);
+
+if (!name) return null;
+if (quantityNumber === null) return null;
+
+// пропускаем шапки и служебные строки
+if (
+  normalizedName.includes("итого") ||
+  normalizedName.includes("сумма") ||
+  normalizedName.includes("стоимость") ||
+  normalizedName.includes("доставка") ||
+  normalizedName.includes("условия") ||
+  normalizedName.includes("ндс") ||
+  normalizedName.includes("коммерческое предложение") ||
+  normalizedName.includes("наименование")
+) {
+  return null;
+}
+
+// пропускаем строки, где в колонке марки случайно попала шапка
+if (
+  normalizedMark.includes("марка") ||
+  normalizedMark.includes("позиция") ||
+  normalizedMark.includes("поз")
+) {
+  return null;
+}
+
+        return {
+          number: index,
+          name,
+          rate: [mark, model].filter(Boolean).join(" "),
+          unit: unitFromQuantityHeader || "шт",
+          projectVolume: quantityNumber,
+          rowType: "item",
+        };
+      })
+      .filter(Boolean) as WorkItem[];
+
+      callback(normalized);
   };
 
   reader.readAsBinaryString(file);

@@ -18,6 +18,11 @@ export type CompareResult = {
   offerUnit: string;
   offerVolume: number | string;
 
-  status: "ОК" | "Объем отличается" | "Частичное совпадение" | "Нет в КП";
+  status:
+  | "ОК"
+  | "Объем отличается"
+  | "Частичное совпадение"
+  | "Нет в КП"
+  | "Есть в КП, нет в спецификации";
   similarity?: number;
 };
