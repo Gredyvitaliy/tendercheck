@@ -1,6 +1,7 @@
 import type { WorkItem, CompareResult } from "./types";
 import { normalizeText } from "./utils";
 import { extractItemFeatures } from "./itemFeatures";
+
 const getPrimaryMark = (item: WorkItem) => {
   const rateFeatures = extractItemFeatures(item.rate || "");
 
@@ -15,15 +16,16 @@ const getPrimaryMark = (item: WorkItem) => {
 
 const groupWorkItems = (items: WorkItem[]) => {
   return Object.values(
-    items.reduce((acc, item) => {
+    items.reduce((acc, item, itemIndex) => {
       const features = extractItemFeatures(item);
-
       const mark = getPrimaryMark(item);
       const itemType = features.itemType || "";
 
       const key = mark
         ? normalizeText(`${itemType} ${mark}`)
-        : normalizeText(`${item.name} ${item.rate} ${item.unit}`);
+        : `row-${itemIndex}-${normalizeText(
+            `${item.name} ${item.rate} ${item.unit}`
+          )}`;
 
       if (!acc[key]) {
         acc[key] = { ...item };
@@ -35,6 +37,151 @@ const groupWorkItems = (items: WorkItem[]) => {
 
       return acc;
     }, {} as Record<string, WorkItem>)
+  );
+};
+
+const isAirnedInstallation = (item: WorkItem) => {
+  const text = normalizeText(`${item.name} ${item.rate}`);
+  return text.includes("установка") && text.includes("airned");
+};
+
+const getAirnedCode = (item: WorkItem) => {
+  const text = normalizeText(`${item.name} ${item.rate}`)
+    .replace(/\s+/g, "")
+    .replace(/[–—]/g, "-");
+
+  const match = text.match(/airned[-/]?[a-zа-я0-9./-]+/i);
+
+  return match ? match[0].replace(/[^a-zа-я0-9./-]/gi, "") : "";
+};
+
+const getPlainItemKind = (item: WorkItem) => {
+  const text = normalizeText(`${item.name} ${item.rate}`);
+
+  if (text.includes("вентилятор")) return "вентилятор";
+  if (text.includes("шумоглушитель")) return "шумоглушитель";
+  if (text.includes("корпус фильтра")) return "корпус фильтра";
+  if (text.includes("фильтр")) return "фильтр";
+  if (text.includes("крыш")) return "крышка";
+  if (text.includes("воздухозабор")) return "воздухозаборная решетка";
+  if (text.includes("сетка")) return "сетка";
+  if (text.includes("регулятор")) return "регулятор";
+  if (text.includes("диффузор")) return "диффузор";
+  if (text.includes("вставка")) return "вставка";
+  if (text.includes("заслонка")) return "заслонка";
+  if (text.includes("клапан")) return "клапан";
+  if (text.includes("решетка") || text.includes("решётка")) return "решетка";
+  if (text.includes("установка")) return "установка";
+  if (text.includes("блок")) return "блок";
+  if (text.includes("кабель")) return "кабель";
+  if (text.includes("адаптер")) return "адаптер";
+
+  return "";
+};
+
+const calculateTextSimilarity = (spec: WorkItem, offer: WorkItem) => {
+  const specName = normalizeText(`${spec.name} ${spec.rate}`);
+  const offerName = normalizeText(`${offer.name} ${offer.rate}`);
+
+  const words = specName.split(" ").filter((word) => word.length > 2);
+  const matchedWords = words.filter((word) => offerName.includes(word));
+
+  let similarity =
+    words.length > 0 ? (matchedWords.length / words.length) * 100 : 0;
+
+  const specTokens = specName.split(" ");
+  const offerTokens = offerName.split(" ");
+
+  const importantTokens = specTokens.filter((token) =>
+    /[a-zа-я]+[0-9]+|[0-9]+[a-zа-я]+|[0-9]+x[0-9]+/i.test(token)
+  );
+
+  const matchedImportantTokens = importantTokens.filter((token) =>
+    offerTokens.includes(token)
+  );
+
+  similarity += matchedImportantTokens.length * 20;
+
+  if (similarity > 100) similarity = 100;
+  if (similarity < 0) similarity = 0;
+
+  return similarity;
+};
+
+const extractModelCodes = (text: string) => {
+  const normalized = normalizeText(text)
+    .replace(/[()]/g, " ")
+    .replace(/[.,;]/g, " ")
+    .replace(/[–—]/g, "-");
+
+  const codes = new Set<string>();
+
+  const compactMatches =
+    normalized.match(/[a-zа-я]+[-/]?[a-zа-я0-9]*\d+[a-zа-я0-9/-]*/gi) || [];
+
+  compactMatches.forEach((code) => {
+    if (code.trim().length >= 3) {
+      codes.add(code.trim());
+    }
+  });
+
+  const brandSizeMatches =
+    normalized.match(/[a-zа-я]{3,}\s+\d{1,4}[-x/]\d{1,4}[a-zа-я0-9/-]*/gi) ||
+    [];
+
+  brandSizeMatches.forEach((code) => {
+    if (code.trim().length >= 5) {
+      codes.add(code.trim());
+    }
+  });
+
+  return Array.from(codes);
+};
+
+const normalizeModelCode = (code: string) => {
+  return normalizeText(code).replace(/[^a-zа-я0-9]/gi, "");
+};
+
+const codesMatch = (specCodes: string[], offerCodes: string[]) => {
+  return specCodes.some((specCode) => {
+    const normalizedSpecCode = normalizeModelCode(specCode);
+
+    return offerCodes.some((offerCode) => {
+      const normalizedOfferCode = normalizeModelCode(offerCode);
+
+      if (normalizedSpecCode.length < 5 || normalizedOfferCode.length < 5) {
+        return false;
+      }
+
+      if (normalizedSpecCode === normalizedOfferCode) {
+        return true;
+      }
+
+      const shorter =
+        normalizedSpecCode.length < normalizedOfferCode.length
+          ? normalizedSpecCode
+          : normalizedOfferCode;
+
+      const longer =
+        normalizedSpecCode.length >= normalizedOfferCode.length
+          ? normalizedSpecCode
+          : normalizedOfferCode;
+
+      return shorter.length >= 6 && longer.includes(shorter);
+    });
+  });
+};
+
+const haveDifferentDimensions = (spec: WorkItem, offer: WorkItem) => {
+  const specFeatures = extractItemFeatures(spec);
+  const offerFeatures = extractItemFeatures(offer);
+
+  if (!specFeatures.dimensions.length || !offerFeatures.dimensions.length) {
+    return false;
+  }
+
+  return !specFeatures.dimensions.some((dimension) =>
+    offerFeatures.dimensions.includes(dimension)
   );
 };
 
@@ -52,78 +199,98 @@ export const compareWorkItems = (
     let bestMatchIndex = -1;
     let bestSimilarity = 0;
 
-   groupedOfferItems.forEach((offer, offerIndex) => {
-  if (usedOfferIndexes.has(offerIndex)) {
-    return;
-  }
+    const specFeatures = extractItemFeatures(spec);
+    const specPrimaryMark = getPrimaryMark(spec);
+    const specPlainKind = getPlainItemKind(spec);
 
-  const specFeatures = extractItemFeatures(spec);
-  const offerFeatures = extractItemFeatures(offer);
+    groupedOfferItems.forEach((offer, offerIndex) => {
+      if (usedOfferIndexes.has(offerIndex)) {
+        return;
+      }
 
-  const specPrimaryMark = getPrimaryMark(spec);
-  const offerPrimaryMark = getPrimaryMark(offer);
+      const offerFeatures = extractItemFeatures(offer);
+      const offerPrimaryMark = getPrimaryMark(offer);
+      const offerPlainKind = getPlainItemKind(offer);
 
-  if (
-    specPrimaryMark &&
-    offerPrimaryMark &&
-    specPrimaryMark !== offerPrimaryMark
-  ) {
-    return;
-  }
+      if (isAirnedInstallation(spec) || isAirnedInstallation(offer)) {
+        const specAirnedCode = getAirnedCode(spec);
+        const offerAirnedCode = getAirnedCode(offer);
 
-  if (
-    specFeatures.itemType !== "прочее" &&
-    offerFeatures.itemType !== "прочее" &&
-    specFeatures.itemType !== offerFeatures.itemType
-  ) {
-    return;
-  }
+        if (!specAirnedCode || !offerAirnedCode) {
+          return;
+        }
 
-  const specName = normalizeText(`${spec.name} ${spec.rate}`);
-  const offerName = normalizeText(`${offer.name} ${offer.rate}`);
+        if (specAirnedCode !== offerAirnedCode) {
+          return;
+        }
+      }
 
-      const words = specName.split(" ").filter((word) => word.length > 2);
-      const matchedWords = words.filter((word) => offerName.includes(word));
+      if (
+        !specPrimaryMark &&
+        !offerPrimaryMark &&
+        specPlainKind &&
+        offerPlainKind &&
+        specPlainKind !== offerPlainKind
+      ) {
+        return;
+      }
 
-      let similarity =
-        words.length > 0 ? (matchedWords.length / words.length) * 100 : 0;
+      if (specPrimaryMark && offerPrimaryMark) {
+        if (specPrimaryMark !== offerPrimaryMark) {
+          return;
+        }
+      }
 
-      const specTokens = specName.split(" ");
-      const offerTokens = offerName.split(" ");
+      if (
+        specFeatures.itemType !== "прочее" &&
+        offerFeatures.itemType !== "прочее" &&
+        specFeatures.itemType !== offerFeatures.itemType
+      ) {
+        return;
+      }
 
-      const importantTokens = specTokens.filter((token) =>
-        /[a-z]+[0-9]+|[0-9]+[a-z]+|[0-9]+x[0-9]+/i.test(token)
-      );
+      let similarity = calculateTextSimilarity(spec, offer);
 
-      const matchedImportantTokens = importantTokens.filter((token) =>
-        offerTokens.includes(token)
-      );
+      const specCodes = extractModelCodes(`${spec.name} ${spec.rate}`);
+      const offerCodes = extractModelCodes(`${offer.name} ${offer.rate}`);
 
-     similarity += matchedImportantTokens.length * 20;
+      const hasSameCode = codesMatch(specCodes, offerCodes);
 
-if (specPrimaryMark && offerPrimaryMark && specPrimaryMark === offerPrimaryMark) {
-  similarity += 60;
-}
+      const hasModelCodes =
+        !specPrimaryMark &&
+        !offerPrimaryMark &&
+        specCodes.length > 0 &&
+        offerCodes.length > 0;
 
-if (specFeatures.dimensions.length && offerFeatures.dimensions.length) {
-  const hasSameDimension = specFeatures.dimensions.some((dimension) =>
-    offerFeatures.dimensions.includes(dimension)
-  );
+      if (hasModelCodes && !hasSameCode) {
+        return;
+      }
 
-  if (hasSameDimension) {
-    similarity += 30;
-  } else {
-    similarity -= 80;
-  }
-}
+      if (
+        !specPrimaryMark &&
+        !offerPrimaryMark &&
+        hasSameCode &&
+        specPlainKind &&
+        offerPlainKind &&
+        specPlainKind === offerPlainKind
+      ) {
+        similarity = Math.max(similarity, 85);
+      }
 
-if (similarity > 100) {
-  similarity = 100;
-}
+      if (
+        specPrimaryMark &&
+        offerPrimaryMark &&
+        specPrimaryMark === offerPrimaryMark
+      ) {
+        similarity += 60;
+      }
 
-if (similarity < 0) {
-  similarity = 0;
-}
+      if (haveDifferentDimensions(spec, offer)) {
+        similarity -= 30;
+      }
+
+      if (similarity > 100) similarity = 100;
+      if (similarity < 0) similarity = 0;
 
       if (similarity > bestSimilarity) {
         bestSimilarity = similarity;
@@ -132,88 +299,35 @@ if (similarity < 0) {
       }
     });
 
-   if (!bestMatch || bestSimilarity < 50) {
-  return {
-    name: spec.name,
-    rate: spec.rate,
-    unit: spec.unit,
-    specVolume: spec.projectVolume,
+    const missingThreshold = specPrimaryMark ? 50 : 30;
 
-    offerName: "-",
-    offerRate: "-",
-    offerUnit: "-",
-    offerVolume: "-",
+    if (!bestMatch || bestSimilarity < missingThreshold) {
+      return {
+        name: spec.name,
+        rate: spec.rate,
+        unit: spec.unit,
+        specVolume: spec.projectVolume,
 
-    status: "Нет в КП",
-    similarity: 0,
-  };
-}
+        offerName: "-",
+        offerRate: "-",
+        offerUnit: "-",
+        offerVolume: "-",
+
+        status: "Нет в КП",
+        similarity: 0,
+      };
+    }
 
     usedOfferIndexes.add(bestMatchIndex);
-    const finalSpecFeatures = extractItemFeatures(spec);
-const finalOfferFeatures = extractItemFeatures(bestMatch);
-console.log("FINAL FEATURES CHECK", {
-  specName: spec.name,
-  specRate: spec.rate,
-  offerName: bestMatch.name,
-  offerRate: bestMatch.rate,
-  specMarks: finalSpecFeatures.marks,
-  offerMarks: finalOfferFeatures.marks,
-  specDimensions: finalSpecFeatures.dimensions,
-  offerDimensions: finalOfferFeatures.dimensions,
-});
-const finalSpecPrimaryMark = getPrimaryMark(spec);
-const finalOfferPrimaryMark = getPrimaryMark(bestMatch);
 
-const hasSameFinalMark =
-  finalSpecPrimaryMark &&
-  finalOfferPrimaryMark &&
-  finalSpecPrimaryMark === finalOfferPrimaryMark;
+    const offerPrimaryMark = getPrimaryMark(bestMatch);
 
-const hasDifferentDimensions =
-  finalSpecFeatures.dimensions.length > 0 &&
-  finalOfferFeatures.dimensions.length > 0 &&
-  !finalSpecFeatures.dimensions.some((dimension) =>
-    finalOfferFeatures.dimensions.includes(dimension)
-  );
-if (hasDifferentDimensions) {
-  return {
-    name: spec.name,
-    rate: spec.rate,
-    unit: spec.unit,
-    specVolume: spec.projectVolume,
+    const hasSameMark =
+      specPrimaryMark && offerPrimaryMark && specPrimaryMark === offerPrimaryMark;
 
-    offerName: bestMatch.name,
-    offerRate: bestMatch.rate,
-    offerUnit: bestMatch.unit,
-    offerVolume: bestMatch.projectVolume,
+    const dimensionsAreDifferent = haveDifferentDimensions(spec, bestMatch);
 
-    status: "Размер отличается",
-    similarity: bestSimilarity,
-  };
-}
-if (
-  hasSameFinalMark &&
-  !hasDifferentDimensions &&
-  Number(spec.projectVolume) === Number(bestMatch.projectVolume)
-) {
-  return {
-    name: spec.name,
-    rate: spec.rate,
-    unit: spec.unit,
-    specVolume: spec.projectVolume,
-
-    offerName: bestMatch.name,
-    offerRate: bestMatch.rate,
-    offerUnit: bestMatch.unit,
-    offerVolume: bestMatch.projectVolume,
-
-    status: "ОК",
-    similarity: 100,
-  };
-}
-
-    if (bestSimilarity < 80) {
+    if (hasSameMark && dimensionsAreDifferent) {
       return {
         name: spec.name,
         rate: spec.rate,
@@ -225,7 +339,7 @@ if (
         offerUnit: bestMatch.unit,
         offerVolume: bestMatch.projectVolume,
 
-        status: "Частичное совпадение",
+        status: "Размер отличается",
         similarity: bestSimilarity,
       };
     }
@@ -247,6 +361,25 @@ if (
       };
     }
 
+    const partialThreshold = specPrimaryMark ? 80 : 65;
+
+    if (bestSimilarity < partialThreshold && !hasSameMark) {
+      return {
+        name: spec.name,
+        rate: spec.rate,
+        unit: spec.unit,
+        specVolume: spec.projectVolume,
+
+        offerName: bestMatch.name,
+        offerRate: bestMatch.rate,
+        offerUnit: bestMatch.unit,
+        offerVolume: bestMatch.projectVolume,
+
+        status: "Частичное совпадение",
+        similarity: bestSimilarity,
+      };
+    }
+
     return {
       name: spec.name,
       rate: spec.rate,
@@ -259,7 +392,7 @@ if (
       offerVolume: bestMatch.projectVolume,
 
       status: "ОК",
-      similarity: bestSimilarity,
+      similarity: hasSameMark ? 100 : bestSimilarity,
     };
   });
 

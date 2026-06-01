@@ -224,8 +224,8 @@ export function parseOfferExcel(file: File, callback: (items: WorkItem[]) => voi
   const text = String(value || "").replace(/[–—]/g, "-");
 
   const match = text.match(
-    /(?:^|[^а-яa-z0-9])((?:ВП|BP|В|B|ПД|PD)\s*[-]?\s*\d+)/i
-  );
+  /(?:^|[^а-яa-z0-9/])((?:ВП|BP|В|B|ПД|PD)\s*-\s*\d+)/i
+);
 
   if (!match) return "";
 
