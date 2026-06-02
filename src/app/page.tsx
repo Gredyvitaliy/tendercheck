@@ -314,6 +314,7 @@ export default function Home() {
               <th className="border p-2">Модель / артикул КП</th>
               <th className="border p-2">Объем по КП</th>
               <th className="border p-2">Совпадение</th>
+              <th className="border p-2">Причина</th>
               <th className="border p-2">Статус</th>
             </tr>
           </thead>
@@ -332,14 +333,18 @@ export default function Home() {
                   {item.similarity ? `${Math.round(item.similarity)}%` : "-"}
                 </td>
                 <td className="border p-2">
-                  <span
-                    className={`px-3 py-1 rounded-full font-semibold ${getStatusClass(
-                      item.status
-                    )}`}
-                  >
-                    {item.status}
-                  </span>
-                </td>
+  {item.similarity ? `${Math.round(item.similarity)}%` : "-"}
+</td>
+<td className="border p-2">{item.reason || "-"}</td>
+<td className="border p-2">
+  <span
+    className={`px-3 py-1 rounded-full font-semibold ${getStatusClass(
+      item.status
+    )}`}
+  >
+    {item.status}
+  </span>
+</td>
               </tr>
             ))}
           </tbody>

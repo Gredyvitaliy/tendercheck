@@ -21,8 +21,10 @@ export type CompareResult = {
   status:
   | "ОК"
   | "Объем отличается"
+  | "Размер отличается"
   | "Частичное совпадение"
   | "Нет в КП"
   | "Есть в КП, нет в спецификации";
   similarity?: number;
+  reason?: string;
 };

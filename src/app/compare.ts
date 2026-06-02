@@ -42,6 +42,7 @@ const groupWorkItems = (items: WorkItem[]) => {
 
 const isAirnedInstallation = (item: WorkItem) => {
   const text = normalizeText(`${item.name} ${item.rate}`);
+
   return text.includes("установка") && text.includes("airned");
 };
 
@@ -64,6 +65,7 @@ const getPlainItemKind = (item: WorkItem) => {
   if (text.includes("фильтр")) return "фильтр";
   if (text.includes("крыш")) return "крышка";
   if (text.includes("воздухозабор")) return "воздухозаборная решетка";
+  if (text.includes("воздухораспредел")) return "воздухораспределитель";
   if (text.includes("сетка")) return "сетка";
   if (text.includes("регулятор")) return "регулятор";
   if (text.includes("диффузор")) return "диффузор";
@@ -77,6 +79,57 @@ const getPlainItemKind = (item: WorkItem) => {
   if (text.includes("адаптер")) return "адаптер";
 
   return "";
+};
+
+const getStrictModelKey = (item: WorkItem) => {
+  const text = normalizeText(`${item.name} ${item.rate}`)
+    .toLowerCase()
+    .replace(/[–—]/g, "-")
+    .replace(/[()]/g, " ")
+    .replace(/[.,;]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const patterns = [
+    /[a-zа-я]{2,}\s*\d{1,4}\s*[-x/ ]\s*\d{1,4}[a-zа-я0-9/-]*/gi,
+    /[a-zа-я]{2,}\s*[-/ ]\s*[a-zа-я]*\d+[a-zа-я0-9/-]*/gi,
+  ];
+
+  const matches: string[] = [];
+
+  patterns.forEach((pattern) => {
+    const found = text.match(pattern) || [];
+    matches.push(...found);
+  });
+
+  const cleaned = matches
+    .map((match) =>
+      match
+        .toLowerCase()
+        .replace(/\s+/g, "")
+        .replace(/[^a-zа-я0-9]/gi, "")
+    )
+    .filter((match) => match.length >= 4);
+
+  if (!cleaned.length) return "";
+
+  return cleaned[cleaned.length - 1];
+};
+
+const requiresStrictModelMatch = (kind: string) => {
+  return [
+    "вставка",
+    "вентилятор",
+    "шумоглушитель",
+    "корпус фильтра",
+    "фильтр",
+    "крышка",
+    "заслонка",
+    "клапан",
+    "решетка",
+    "воздухозаборная решетка",
+    "воздухораспределитель",
+  ].includes(kind);
 };
 
 const calculateTextSimilarity = (spec: WorkItem, offer: WorkItem) => {
@@ -126,7 +179,7 @@ const extractModelCodes = (text: string) => {
   });
 
   const brandSizeMatches =
-    normalized.match(/[a-zа-я]{3,}\s+\d{1,4}[-x/]\d{1,4}[a-zа-я0-9/-]*/gi) ||
+    normalized.match(/[a-zа-я]{2,}\s+\d{1,4}[-x/]\d{1,4}[a-zа-я0-9/-]*/gi) ||
     [];
 
   brandSizeMatches.forEach((code) => {
@@ -198,10 +251,12 @@ export const compareWorkItems = (
     let bestMatch: WorkItem | undefined;
     let bestMatchIndex = -1;
     let bestSimilarity = 0;
+    let bestReason = "";
 
     const specFeatures = extractItemFeatures(spec);
     const specPrimaryMark = getPrimaryMark(spec);
     const specPlainKind = getPlainItemKind(spec);
+    const specStrictModelKey = getStrictModelKey(spec);
 
     groupedOfferItems.forEach((offer, offerIndex) => {
       if (usedOfferIndexes.has(offerIndex)) {
@@ -211,6 +266,8 @@ export const compareWorkItems = (
       const offerFeatures = extractItemFeatures(offer);
       const offerPrimaryMark = getPrimaryMark(offer);
       const offerPlainKind = getPlainItemKind(offer);
+      const offerStrictModelKey = getStrictModelKey(offer);
+     
 
       if (isAirnedInstallation(spec) || isAirnedInstallation(offer)) {
         const specAirnedCode = getAirnedCode(spec);
@@ -231,6 +288,20 @@ export const compareWorkItems = (
         specPlainKind &&
         offerPlainKind &&
         specPlainKind !== offerPlainKind
+      ) {
+        return;
+      }
+
+      if (
+        !specPrimaryMark &&
+        !offerPrimaryMark &&
+        specPlainKind &&
+        offerPlainKind &&
+        specPlainKind === offerPlainKind &&
+        requiresStrictModelMatch(specPlainKind) &&
+        specStrictModelKey &&
+        offerStrictModelKey &&
+        specStrictModelKey !== offerStrictModelKey
       ) {
         return;
       }
@@ -296,6 +367,25 @@ export const compareWorkItems = (
         bestSimilarity = similarity;
         bestMatch = offer;
         bestMatchIndex = offerIndex;
+
+        if (isAirnedInstallation(spec) || isAirnedInstallation(offer)) {
+          bestReason = "Совпал полный код AIRNED";
+        } else if (
+          specPrimaryMark &&
+          offerPrimaryMark &&
+          specPrimaryMark === offerPrimaryMark
+        ) {
+          bestReason = `Совпала марка: ${specPrimaryMark}`;
+        } else if (
+          hasSameCode &&
+          specPlainKind &&
+          offerPlainKind &&
+          specPlainKind === offerPlainKind
+        ) {
+          bestReason = `Совпал тип "${specPlainKind}" и модель/код`;
+        } else {
+          bestReason = `Текстовое совпадение: ${Math.round(similarity)}%`;
+        }
       }
     });
 
@@ -315,6 +405,12 @@ export const compareWorkItems = (
 
         status: "Нет в КП",
         similarity: 0,
+        reason:
+          bestSimilarity > 0
+            ? `Лучшее совпадение ${Math.round(
+                bestSimilarity
+              )}%, ниже порога ${missingThreshold}%`
+            : "Подходящая позиция в КП не найдена",
       };
     }
 
@@ -341,6 +437,7 @@ export const compareWorkItems = (
 
         status: "Размер отличается",
         similarity: bestSimilarity,
+        reason: bestReason || "Позиция найдена, но размер отличается",
       };
     }
 
@@ -358,6 +455,7 @@ export const compareWorkItems = (
 
         status: "Объем отличается",
         similarity: bestSimilarity,
+        reason: bestReason || "Позиция найдена, но объем отличается",
       };
     }
 
@@ -377,6 +475,7 @@ export const compareWorkItems = (
 
         status: "Частичное совпадение",
         similarity: bestSimilarity,
+        reason: bestReason || `Слабое совпадение: ${Math.round(bestSimilarity)}%`,
       };
     }
 
@@ -393,6 +492,7 @@ export const compareWorkItems = (
 
       status: "ОК",
       similarity: hasSameMark ? 100 : bestSimilarity,
+      reason: bestReason || "Позиция совпала",
     };
   });
 
@@ -411,6 +511,7 @@ export const compareWorkItems = (
 
       status: "Есть в КП, нет в спецификации",
       similarity: 0,
+      reason: "Позиция КП не была использована в сравнении",
     }));
 
   return [...comparison, ...extraOfferItems];
