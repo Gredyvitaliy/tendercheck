@@ -1,6 +1,7 @@
 import type { WorkItem, CompareResult } from "./types";
 import { normalizeText } from "./utils";
 import { extractItemFeatures } from "./itemFeatures";
+import { detectItemStrategy } from "./matching/detectStrategy";
 
 const getPrimaryMark = (item: WorkItem) => {
   const rateFeatures = extractItemFeatures(item.rate || "");
@@ -257,6 +258,7 @@ export const compareWorkItems = (
     const specPrimaryMark = getPrimaryMark(spec);
     const specPlainKind = getPlainItemKind(spec);
     const specStrictModelKey = getStrictModelKey(spec);
+    const specStrategy = detectItemStrategy(spec);
 
     groupedOfferItems.forEach((offer, offerIndex) => {
       if (usedOfferIndexes.has(offerIndex)) {
@@ -267,6 +269,7 @@ export const compareWorkItems = (
       const offerPrimaryMark = getPrimaryMark(offer);
       const offerPlainKind = getPlainItemKind(offer);
       const offerStrictModelKey = getStrictModelKey(offer);
+      const offerStrategy = detectItemStrategy(offer);
      
 
       if (isAirnedInstallation(spec) || isAirnedInstallation(offer)) {
@@ -363,30 +366,37 @@ export const compareWorkItems = (
       if (similarity > 100) similarity = 100;
       if (similarity < 0) similarity = 0;
 
-      if (similarity > bestSimilarity) {
-        bestSimilarity = similarity;
-        bestMatch = offer;
-        bestMatchIndex = offerIndex;
+     if (similarity > bestSimilarity) {
+  bestSimilarity = similarity;
+  bestMatch = offer;
+  bestMatchIndex = offerIndex;
 
-        if (isAirnedInstallation(spec) || isAirnedInstallation(offer)) {
-          bestReason = "Совпал полный код AIRNED";
-        } else if (
-          specPrimaryMark &&
-          offerPrimaryMark &&
-          specPrimaryMark === offerPrimaryMark
-        ) {
-          bestReason = `Совпала марка: ${specPrimaryMark}`;
-        } else if (
-          hasSameCode &&
-          specPlainKind &&
-          offerPlainKind &&
-          specPlainKind === offerPlainKind
-        ) {
-          bestReason = `Совпал тип "${specPlainKind}" и модель/код`;
-        } else {
-          bestReason = `Текстовое совпадение: ${Math.round(similarity)}%`;
-        }
-      }
+  const strategyReason =
+    specStrategy === offerStrategy
+      ? `Стратегия: ${specStrategy}. `
+      : `Стратегия: ${specStrategy}, КП: ${offerStrategy}. `;
+
+  if (isAirnedInstallation(spec) || isAirnedInstallation(offer)) {
+    bestReason = `${strategyReason}Совпал полный код AIRNED`;
+  } else if (
+    specPrimaryMark &&
+    offerPrimaryMark &&
+    specPrimaryMark === offerPrimaryMark
+  ) {
+    bestReason = `${strategyReason}Совпала марка: ${specPrimaryMark}`;
+  } else if (
+    hasSameCode &&
+    specPlainKind &&
+    offerPlainKind &&
+    specPlainKind === offerPlainKind
+  ) {
+    bestReason = `${strategyReason}Совпал тип "${specPlainKind}" и модель/код`;
+  } else {
+    bestReason = `${strategyReason}Текстовое совпадение: ${Math.round(
+      similarity
+    )}%`;
+  }
+}
     });
 
     const missingThreshold = specPrimaryMark ? 50 : 30;
@@ -406,11 +416,11 @@ export const compareWorkItems = (
         status: "Нет в КП",
         similarity: 0,
         reason:
-          bestSimilarity > 0
-            ? `Лучшее совпадение ${Math.round(
-                bestSimilarity
-              )}%, ниже порога ${missingThreshold}%`
-            : "Подходящая позиция в КП не найдена",
+  bestSimilarity > 0
+    ? `Стратегия: ${specStrategy}. Лучшее совпадение ${Math.round(
+        bestSimilarity
+      )}%, ниже порога ${missingThreshold}%`
+    : `Стратегия: ${specStrategy}. Подходящая позиция в КП не найдена`,
       };
     }
 

@@ -17,48 +17,22 @@ export default function Home() {
   const [uploadResetKey, setUploadResetKey] = useState(0);
 
   const handleSpecUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const file = e.target.files?.[0];
+  if (!file) return;
 
-    parseSpecExcel(file, (items) => {
-      console.table(
-        items
-          .filter((item) =>
-            `${item.name} ${item.rate}`.toLowerCase().includes("airned")
-          )
-          .map((item) => ({
-            name: item.name,
-            rate: item.rate,
-            unit: item.unit,
-            volume: item.projectVolume,
-          }))
-      );
-
-      setSpecItems(items);
-    });
-  };
+  parseSpecExcel(file, (items) => {
+    setSpecItems(items);
+  });
+};
 
   const handleOfferUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const file = e.target.files?.[0];
+  if (!file) return;
 
-    parseOfferExcel(file, (items) => {
-      console.table(
-        items
-          .filter((item) =>
-            `${item.name} ${item.rate}`.toLowerCase().includes("airned")
-          )
-          .map((item) => ({
-            name: item.name,
-            rate: item.rate,
-            unit: item.unit,
-            volume: item.projectVolume,
-          }))
-      );
-
-      setOfferItems(items);
-    });
-  };
+  parseOfferExcel(file, (items) => {
+    setOfferItems(items);
+  });
+};
 
   const clearAllData = () => {
     setSpecItems([]);
