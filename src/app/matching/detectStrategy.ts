@@ -47,4 +47,3 @@ export const detectItemStrategy = (item: WorkItem): MatchStrategy => {
 
   return "text";
 };
-
