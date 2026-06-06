@@ -2,7 +2,10 @@ import type { WorkItem, CompareResult } from "./types";
 import { normalizeText } from "./utils";
 import { extractItemFeatures } from "./itemFeatures";
 import { detectItemStrategy } from "./matching/detectStrategy";
-import { getPrimaryMark } from "./matching/matchUtils";
+import {
+  getPrimaryMark,
+  haveDifferentDimensions,
+} from "./matching/matchUtils";
 
 const groupWorkItems = (items: WorkItem[]) => {
   return Object.values(
@@ -215,18 +218,7 @@ const codesMatch = (specCodes: string[], offerCodes: string[]) => {
   });
 };
 
-const haveDifferentDimensions = (spec: WorkItem, offer: WorkItem) => {
-  const specFeatures = extractItemFeatures(spec);
-  const offerFeatures = extractItemFeatures(offer);
 
-  if (!specFeatures.dimensions.length || !offerFeatures.dimensions.length) {
-    return false;
-  }
-
-  return !specFeatures.dimensions.some((dimension) =>
-    offerFeatures.dimensions.includes(dimension)
-  );
-};
 
 export const compareWorkItems = (
   specItems: WorkItem[],
