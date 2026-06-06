@@ -2,6 +2,7 @@ import type { WorkItem, CompareResult } from "./types";
 import { normalizeText } from "./utils";
 import { extractItemFeatures } from "./itemFeatures";
 import { detectItemStrategy } from "./matching/detectStrategy";
+import { matchByMarks } from "./matching/matchByMarks";
 import {
   calculateTextSimilarity,
   codesMatch,
@@ -72,7 +73,14 @@ export const compareWorkItems = (
       const offerPlainKind = getPlainItemKind(offer);
       const offerStrictModelKey = getStrictModelKey(offer);
       const offerStrategy = detectItemStrategy(offer);
+      const markMatch =
+        specStrategy === "mark-based" && offerStrategy === "mark-based"
+          ? matchByMarks(spec, offer)
+          : undefined;
      
+      if (markMatch && !markMatch.canCompare) {
+        return;
+      }
 
       if (isAirnedInstallation(spec) || isAirnedInstallation(offer)) {
         const specAirnedCode = getAirnedCode(spec);
@@ -180,6 +188,8 @@ export const compareWorkItems = (
 
   if (isAirnedInstallation(spec) || isAirnedInstallation(offer)) {
     bestReason = `${strategyReason}Совпал полный код AIRNED`;
+  } else if (markMatch) {
+    bestReason = `${strategyReason}${markMatch.reason}`;
   } else if (
     specPrimaryMark &&
     offerPrimaryMark &&
