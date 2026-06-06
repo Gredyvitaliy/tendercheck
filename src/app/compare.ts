@@ -6,8 +6,10 @@ import {
   calculateTextSimilarity,
   codesMatch,
   extractModelCodes,
+  getAirnedCode,
   getPrimaryMark,
   haveDifferentDimensions,
+  isAirnedInstallation,
 } from "./matching/matchUtils";
 
 const groupWorkItems = (items: WorkItem[]) => {
@@ -34,22 +36,6 @@ const groupWorkItems = (items: WorkItem[]) => {
       return acc;
     }, {} as Record<string, WorkItem>)
   );
-};
-
-const isAirnedInstallation = (item: WorkItem) => {
-  const text = normalizeText(`${item.name} ${item.rate}`);
-
-  return text.includes("установка") && text.includes("airned");
-};
-
-const getAirnedCode = (item: WorkItem) => {
-  const text = normalizeText(`${item.name} ${item.rate}`)
-    .replace(/\s+/g, "")
-    .replace(/[–—]/g, "-");
-
-  const match = text.match(/airned[-/]?[a-zа-я0-9./-]+/i);
-
-  return match ? match[0].replace(/[^a-zа-я0-9./-]/gi, "") : "";
 };
 
 const getPlainItemKind = (item: WorkItem) => {
