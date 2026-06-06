@@ -4,6 +4,8 @@ import { extractItemFeatures } from "./itemFeatures";
 import { detectItemStrategy } from "./matching/detectStrategy";
 import {
   calculateTextSimilarity,
+  codesMatch,
+  extractModelCodes,
   getPrimaryMark,
   haveDifferentDimensions,
 } from "./matching/matchUtils";
@@ -125,72 +127,6 @@ const requiresStrictModelMatch = (kind: string) => {
     "воздухораспределитель",
   ].includes(kind);
 };
-
-const extractModelCodes = (text: string) => {
-  const normalized = normalizeText(text)
-    .replace(/[()]/g, " ")
-    .replace(/[.,;]/g, " ")
-    .replace(/[–—]/g, "-");
-
-  const codes = new Set<string>();
-
-  const compactMatches =
-    normalized.match(/[a-zа-я]+[-/]?[a-zа-я0-9]*\d+[a-zа-я0-9/-]*/gi) || [];
-
-  compactMatches.forEach((code) => {
-    if (code.trim().length >= 3) {
-      codes.add(code.trim());
-    }
-  });
-
-  const brandSizeMatches =
-    normalized.match(/[a-zа-я]{2,}\s+\d{1,4}[-x/]\d{1,4}[a-zа-я0-9/-]*/gi) ||
-    [];
-
-  brandSizeMatches.forEach((code) => {
-    if (code.trim().length >= 5) {
-      codes.add(code.trim());
-    }
-  });
-
-  return Array.from(codes);
-};
-
-const normalizeModelCode = (code: string) => {
-  return normalizeText(code).replace(/[^a-zа-я0-9]/gi, "");
-};
-
-const codesMatch = (specCodes: string[], offerCodes: string[]) => {
-  return specCodes.some((specCode) => {
-    const normalizedSpecCode = normalizeModelCode(specCode);
-
-    return offerCodes.some((offerCode) => {
-      const normalizedOfferCode = normalizeModelCode(offerCode);
-
-      if (normalizedSpecCode.length < 5 || normalizedOfferCode.length < 5) {
-        return false;
-      }
-
-      if (normalizedSpecCode === normalizedOfferCode) {
-        return true;
-      }
-
-      const shorter =
-        normalizedSpecCode.length < normalizedOfferCode.length
-          ? normalizedSpecCode
-          : normalizedOfferCode;
-
-      const longer =
-        normalizedSpecCode.length >= normalizedOfferCode.length
-          ? normalizedSpecCode
-          : normalizedOfferCode;
-
-      return shorter.length >= 6 && longer.includes(shorter);
-    });
-  });
-};
-
-
 
 export const compareWorkItems = (
   specItems: WorkItem[],
