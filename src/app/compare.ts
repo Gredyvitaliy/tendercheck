@@ -2,18 +2,7 @@ import type { WorkItem, CompareResult } from "./types";
 import { normalizeText } from "./utils";
 import { extractItemFeatures } from "./itemFeatures";
 import { detectItemStrategy } from "./matching/detectStrategy";
-
-const getPrimaryMark = (item: WorkItem) => {
-  const rateFeatures = extractItemFeatures(item.rate || "");
-
-  if (rateFeatures.marks.length > 0) {
-    return rateFeatures.marks[0];
-  }
-
-  const nameFeatures = extractItemFeatures(item.name || "");
-
-  return nameFeatures.marks[nameFeatures.marks.length - 1] || "";
-};
+import { getPrimaryMark } from "./matching/matchUtils";
 
 const groupWorkItems = (items: WorkItem[]) => {
   return Object.values(
