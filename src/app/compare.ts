@@ -7,9 +7,12 @@ import {
   codesMatch,
   extractModelCodes,
   getAirnedCode,
+  getPlainItemKind,
   getPrimaryMark,
+  getStrictModelKey,
   haveDifferentDimensions,
   isAirnedInstallation,
+  requiresStrictModelMatch,
 } from "./matching/matchUtils";
 
 const groupWorkItems = (items: WorkItem[]) => {
@@ -36,82 +39,6 @@ const groupWorkItems = (items: WorkItem[]) => {
       return acc;
     }, {} as Record<string, WorkItem>)
   );
-};
-
-const getPlainItemKind = (item: WorkItem) => {
-  const text = normalizeText(`${item.name} ${item.rate}`);
-
-  if (text.includes("вентилятор")) return "вентилятор";
-  if (text.includes("шумоглушитель")) return "шумоглушитель";
-  if (text.includes("корпус фильтра")) return "корпус фильтра";
-  if (text.includes("фильтр")) return "фильтр";
-  if (text.includes("крыш")) return "крышка";
-  if (text.includes("воздухозабор")) return "воздухозаборная решетка";
-  if (text.includes("воздухораспредел")) return "воздухораспределитель";
-  if (text.includes("сетка")) return "сетка";
-  if (text.includes("регулятор")) return "регулятор";
-  if (text.includes("диффузор")) return "диффузор";
-  if (text.includes("вставка")) return "вставка";
-  if (text.includes("заслонка")) return "заслонка";
-  if (text.includes("клапан")) return "клапан";
-  if (text.includes("решетка") || text.includes("решётка")) return "решетка";
-  if (text.includes("установка")) return "установка";
-  if (text.includes("блок")) return "блок";
-  if (text.includes("кабель")) return "кабель";
-  if (text.includes("адаптер")) return "адаптер";
-
-  return "";
-};
-
-const getStrictModelKey = (item: WorkItem) => {
-  const text = normalizeText(`${item.name} ${item.rate}`)
-    .toLowerCase()
-    .replace(/[–—]/g, "-")
-    .replace(/[()]/g, " ")
-    .replace(/[.,;]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const patterns = [
-    /[a-zа-я]{2,}\s*\d{1,4}\s*[-x/ ]\s*\d{1,4}[a-zа-я0-9/-]*/gi,
-    /[a-zа-я]{2,}\s*[-/ ]\s*[a-zа-я]*\d+[a-zа-я0-9/-]*/gi,
-  ];
-
-  const matches: string[] = [];
-
-  patterns.forEach((pattern) => {
-    const found = text.match(pattern) || [];
-    matches.push(...found);
-  });
-
-  const cleaned = matches
-    .map((match) =>
-      match
-        .toLowerCase()
-        .replace(/\s+/g, "")
-        .replace(/[^a-zа-я0-9]/gi, "")
-    )
-    .filter((match) => match.length >= 4);
-
-  if (!cleaned.length) return "";
-
-  return cleaned[cleaned.length - 1];
-};
-
-const requiresStrictModelMatch = (kind: string) => {
-  return [
-    "вставка",
-    "вентилятор",
-    "шумоглушитель",
-    "корпус фильтра",
-    "фильтр",
-    "крышка",
-    "заслонка",
-    "клапан",
-    "решетка",
-    "воздухозаборная решетка",
-    "воздухораспределитель",
-  ].includes(kind);
 };
 
 export const compareWorkItems = (
