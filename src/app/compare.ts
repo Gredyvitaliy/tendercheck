@@ -3,6 +3,7 @@ import { normalizeText } from "./utils";
 import { extractItemFeatures } from "./itemFeatures";
 import { detectItemStrategy } from "./matching/detectStrategy";
 import {
+  calculateTextSimilarity,
   getPrimaryMark,
   haveDifferentDimensions,
 } from "./matching/matchUtils";
@@ -123,35 +124,6 @@ const requiresStrictModelMatch = (kind: string) => {
     "воздухозаборная решетка",
     "воздухораспределитель",
   ].includes(kind);
-};
-
-const calculateTextSimilarity = (spec: WorkItem, offer: WorkItem) => {
-  const specName = normalizeText(`${spec.name} ${spec.rate}`);
-  const offerName = normalizeText(`${offer.name} ${offer.rate}`);
-
-  const words = specName.split(" ").filter((word) => word.length > 2);
-  const matchedWords = words.filter((word) => offerName.includes(word));
-
-  let similarity =
-    words.length > 0 ? (matchedWords.length / words.length) * 100 : 0;
-
-  const specTokens = specName.split(" ");
-  const offerTokens = offerName.split(" ");
-
-  const importantTokens = specTokens.filter((token) =>
-    /[a-zа-я]+[0-9]+|[0-9]+[a-zа-я]+|[0-9]+x[0-9]+/i.test(token)
-  );
-
-  const matchedImportantTokens = importantTokens.filter((token) =>
-    offerTokens.includes(token)
-  );
-
-  similarity += matchedImportantTokens.length * 20;
-
-  if (similarity > 100) similarity = 100;
-  if (similarity < 0) similarity = 0;
-
-  return similarity;
 };
 
 const extractModelCodes = (text: string) => {
