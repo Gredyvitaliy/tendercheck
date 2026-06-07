@@ -3,6 +3,7 @@ import { normalizeText } from "./utils";
 import { extractItemFeatures } from "./itemFeatures";
 import { detectItemStrategy } from "./matching/detectStrategy";
 import { matchByMarks } from "./matching/matchByMarks";
+import { matchEquipment } from "./matching/matchEquipment";
 import {
   calculateTextSimilarity,
   codesMatch,
@@ -77,8 +78,16 @@ export const compareWorkItems = (
         specStrategy === "mark-based" && offerStrategy === "mark-based"
           ? matchByMarks(spec, offer)
           : undefined;
+      const equipmentMatch =
+        specStrategy === "equipment" && offerStrategy === "equipment"
+          ? matchEquipment(spec, offer)
+          : undefined;
      
       if (markMatch && !markMatch.canCompare) {
+        return;
+      }
+
+      if (equipmentMatch && !equipmentMatch.canCompare) {
         return;
       }
 
@@ -186,7 +195,9 @@ export const compareWorkItems = (
       ? `Стратегия: ${specStrategy}. `
       : `Стратегия: ${specStrategy}, КП: ${offerStrategy}. `;
 
-  if (isAirnedInstallation(spec) || isAirnedInstallation(offer)) {
+  if (equipmentMatch) {
+    bestReason = `${strategyReason}${equipmentMatch.reason}`;
+  } else if (isAirnedInstallation(spec) || isAirnedInstallation(offer)) {
     bestReason = `${strategyReason}Совпал полный код AIRNED`;
   } else if (markMatch) {
     bestReason = `${strategyReason}${markMatch.reason}`;
