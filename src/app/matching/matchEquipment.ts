@@ -1,4 +1,5 @@
 import type { WorkItem } from "../types";
+import { normalizeText } from "../utils";
 import {
   codesMatch,
   extractModelCodes,
@@ -12,6 +13,15 @@ export type EquipmentMatchResult = {
   canCompare: boolean;
   reason: string;
   isStrongMatch: boolean;
+};
+
+export const getSideFeature = (item: WorkItem) => {
+  const tokens = normalizeText(`${item.name} ${item.rate}`).split(" ");
+
+  if (tokens.includes("левый") || tokens.includes("левая")) return "левый";
+  if (tokens.includes("правый") || tokens.includes("правая")) return "правый";
+
+  return "";
 };
 
 export const matchEquipment = (
@@ -63,6 +73,17 @@ export const matchEquipment = (
     return {
       canCompare: false,
       reason: `Типы позиций разные: ${specPlainKind} ≠ ${offerPlainKind}`,
+      isStrongMatch: false,
+    };
+  }
+
+  const specSide = getSideFeature(spec);
+  const offerSide = getSideFeature(offer);
+
+  if (specSide && offerSide && specSide !== offerSide) {
+    return {
+      canCompare: false,
+      reason: `Исполнение отличается: ${specSide} ≠ ${offerSide}`,
       isStrongMatch: false,
     };
   }
