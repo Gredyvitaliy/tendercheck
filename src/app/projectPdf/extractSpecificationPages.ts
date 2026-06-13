@@ -1,3 +1,8 @@
+import {
+  countDistinctKeywords,
+  normalizePageText,
+} from "./pageTextUtils";
+
 const specificationKeywords = [
   "спецификация",
   "ведомость",
@@ -19,9 +24,6 @@ const strongTableMarkers = [
   "тип",
 ] as const;
 
-const normalizeText = (text: string) =>
-  text.toLowerCase().replace(/\s+/g, " ").trim();
-
 const escapeRegExp = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -32,13 +34,16 @@ const containsKeyword = (text: string, keyword: string) =>
   ).test(text);
 
 export const detectSpecificationPage = (text: string): boolean => {
-  const normalizedText = normalizeText(text);
+  const normalizedText = normalizePageText(text).replace(/\n/g, " ");
   const matchedKeywords = specificationKeywords.filter((keyword) =>
     containsKeyword(normalizedText, keyword)
   );
+  const matchedKeywordCount = countDistinctKeywords(normalizedText, [
+    ...matchedKeywords,
+  ]);
   const hasStrongTableMarker = strongTableMarkers.some((marker) =>
     containsKeyword(normalizedText, marker)
   );
 
-  return matchedKeywords.length >= 3 && hasStrongTableMarker;
+  return matchedKeywordCount >= 3 && hasStrongTableMarker;
 };
