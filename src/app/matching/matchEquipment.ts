@@ -15,6 +15,24 @@ export type EquipmentMatchResult = {
   isStrongMatch: boolean;
 };
 
+const equipmentCategories = [
+  "корпус фильтра",
+  "секция рекуператора",
+  "вставка гибкая",
+  "воздухонагреватель",
+  "воздухоохладитель",
+  "шумоглушитель",
+  "вентилятор",
+  "клапан",
+  "фильтр",
+] as const;
+
+const getEquipmentCategory = (item: WorkItem) => {
+  const text = ` ${normalizeText(`${item.name} ${item.rate}`)} `;
+
+  return equipmentCategories.find((category) => text.includes(` ${category} `));
+};
+
 export const getSideFeature = (item: WorkItem) => {
   const tokens = normalizeText(`${item.name} ${item.rate}`).split(" ");
 
@@ -63,6 +81,17 @@ export const matchEquipment = (
       canCompare: true,
       reason: `Совпал код AIRNED ${specAirnedCode}`,
       isStrongMatch: true,
+    };
+  }
+
+  const specCategory = getEquipmentCategory(spec);
+  const offerCategory = getEquipmentCategory(offer);
+
+  if (specCategory && offerCategory && specCategory !== offerCategory) {
+    return {
+      canCompare: false,
+      reason: "Категории оборудования разные",
+      isStrongMatch: false,
     };
   }
 
