@@ -23,3 +23,14 @@ export const testPdfPipeline = async (pdfPath: string): Promise<void> => {
     );
   }
 };
+const pdfPath = process.argv[2];
+
+if (!pdfPath) {
+  console.error("Usage: npx tsx src/app/projectPdf/testPdfPipeline.ts <pdf-path>");
+  process.exit(1);
+}
+
+testPdfPipeline(pdfPath).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
