@@ -5,6 +5,7 @@ import type { WorkItem, CompareResult } from "./types";
 import { parseSpecExcel, parseOfferExcel } from "./parsers";
 import { exportResultsToExcel } from "./exportReport";
 import { compareWorkItems } from "./compare";
+import PdfClassificationSmokeTest from "./projectPdf/PdfClassificationSmokeTest";
 
 export default function Home() {
   const [specItems, setSpecItems] = useState<WorkItem[]>([]);
@@ -147,6 +148,8 @@ export default function Home() {
           </p>
         </div>
       </div>
+
+      <PdfClassificationSmokeTest />
 
       <button
         onClick={compareFiles}

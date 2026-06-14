@@ -2,11 +2,19 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 import type { PdfPageText } from "./findSpecificationPages";
 
+export type PdfBinaryData = ArrayBuffer | Uint8Array;
+
+export const toPdfData = (data: PdfBinaryData): Uint8Array =>
+  data instanceof ArrayBuffer
+    ? new Uint8Array(data)
+    : Uint8Array.from(data);
+
 export const extractPdfPageTexts = async (
-  fileBuffer: ArrayBuffer
+  binaryData: PdfBinaryData
 ): Promise<PdfPageText[]> => {
+  const pdfData = toPdfData(binaryData);
   const loadingTask = getDocument({
-    data: new Uint8Array(fileBuffer),
+    data: pdfData,
   });
   const pdfDocument = await loadingTask.promise;
 

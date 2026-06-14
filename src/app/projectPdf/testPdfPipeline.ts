@@ -4,11 +4,12 @@ import { analyzePdfPages } from "./analyzePdfPages";
 
 export const testPdfPipeline = async (pdfPath: string): Promise<void> => {
   const pdfFile = await readFile(pdfPath);
-  const fileBuffer = pdfFile.buffer.slice(
+  const pdfData = new Uint8Array(
+    pdfFile.buffer,
     pdfFile.byteOffset,
-    pdfFile.byteOffset + pdfFile.byteLength
-  ) as ArrayBuffer;
-  const result = await analyzePdfPages(fileBuffer);
+    pdfFile.byteLength
+  );
+  const result = await analyzePdfPages(pdfData);
 
   console.log("Total pages:", result.totalPages);
   console.log(

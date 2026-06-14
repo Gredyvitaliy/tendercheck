@@ -1,8 +1,11 @@
 import { findSpecificationPages } from "./findSpecificationPages";
-import { extractPdfPageTexts } from "./pdfTextExtractor";
+import {
+  extractPdfPageTexts,
+  type PdfBinaryData,
+} from "./pdfTextExtractor";
 
-export const analyzePdfPages = async (fileBuffer: ArrayBuffer) => {
-  const pages = await extractPdfPageTexts(fileBuffer);
+export const analyzePdfPages = async (pdfData: PdfBinaryData) => {
+  const pages = await extractPdfPageTexts(pdfData);
   const specificationPages = findSpecificationPages(pages);
 
   return {
