@@ -4,6 +4,23 @@ import type { PdfPageText } from "./findSpecificationPages";
 
 export type PdfBinaryData = ArrayBuffer | Uint8Array;
 
+export const PDF_PAGE_LIMIT = 300;
+
+export class PdfPageLimitError extends Error {
+  readonly code = "PDF_PAGE_LIMIT_EXCEEDED";
+
+  constructor(public readonly pageCount: number) {
+    super("PDF page limit exceeded");
+    this.name = "PdfPageLimitError";
+  }
+}
+
+export const assertPdfPageLimit = (pageCount: number): void => {
+  if (pageCount > PDF_PAGE_LIMIT) {
+    throw new PdfPageLimitError(pageCount);
+  }
+};
+
 export const toPdfData = (data: PdfBinaryData): Uint8Array =>
   data instanceof ArrayBuffer
     ? new Uint8Array(data)
@@ -47,6 +64,8 @@ export const extractPdfPageTexts = async (
   const pdfDocument = await loadingTask.promise;
 
   try {
+    assertPdfPageLimit(pdfDocument.numPages);
+
     const pages: PdfPageText[] = [];
 
     for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {

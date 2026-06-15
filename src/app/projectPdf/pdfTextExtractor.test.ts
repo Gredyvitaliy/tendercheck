@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  assertPdfPageLimit,
   extractTextFromItems,
+  PdfPageLimitError,
   toPdfData,
 } from "./pdfTextExtractor";
 
@@ -32,4 +34,15 @@ test("preserves PDF.js end-of-line markers", () => {
   ]);
 
   assert.equal(text, "Поз. Наименование\n1 Вентилятор шт 2");
+});
+
+test("rejects PDFs with more than 300 pages", () => {
+  assert.doesNotThrow(() => assertPdfPageLimit(300));
+  assert.throws(
+    () => assertPdfPageLimit(301),
+    (error: unknown) =>
+      error instanceof PdfPageLimitError &&
+      error.code === "PDF_PAGE_LIMIT_EXCEEDED" &&
+      error.message === "PDF page limit exceeded"
+  );
 });
