@@ -3,6 +3,11 @@ import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { compareWorkItems } from "../compare";
+import {
+  applyOfferScopeToResults,
+  detectOfferScope,
+  type OfferScope,
+} from "../matching/detectOfferScope";
 import { parseOfferExcelData } from "../parsers";
 import type {
   CompareResult,
@@ -23,6 +28,7 @@ const compareStatuses: CompareResultStatus[] = [
   "Размер отличается",
   "Частичное совпадение",
   "Нет в КП",
+  "Вне области КП",
   "Есть в КП, нет в спецификации",
 ];
 
@@ -31,7 +37,9 @@ export interface PdfExcelCompareSummary {
   pdfWorkItemsAfterSplit: number;
   excelWorkItems: number;
   totalResults: number;
-  statusCounts: Record<CompareResultStatus, number>;
+  offerScope: OfferScope;
+  statusCountsBeforeScope: Record<CompareResultStatus, number>;
+  statusCountsAfterScope: Record<CompareResultStatus, number>;
 }
 
 export interface PdfExcelCompareDebugResult {
@@ -45,8 +53,13 @@ export const buildCompareSummary = (
   pdfWorkItemsBeforeSplit: number,
   pdfWorkItems: WorkItem[],
   excelWorkItems: WorkItem[],
-  results: CompareResult[]
+  resultsBeforeScope: CompareResult[],
+  resultsAfterScope: CompareResult[],
+  offerScope: OfferScope
 ): PdfExcelCompareSummary => {
+  const countStatuses = (
+    results: CompareResult[]
+  ): Record<CompareResultStatus, number> => {
   const statusCounts = Object.fromEntries(
     compareStatuses.map((status) => [status, 0])
   ) as Record<CompareResultStatus, number>;
@@ -55,12 +68,17 @@ export const buildCompareSummary = (
     statusCounts[result.status] += 1;
   }
 
+    return statusCounts;
+  };
+
   return {
     pdfWorkItemsBeforeSplit,
     pdfWorkItemsAfterSplit: pdfWorkItems.length,
     excelWorkItems: excelWorkItems.length,
-    totalResults: results.length,
-    statusCounts,
+    totalResults: resultsAfterScope.length,
+    offerScope,
+    statusCountsBeforeScope: countStatuses(resultsBeforeScope),
+    statusCountsAfterScope: countStatuses(resultsAfterScope),
   };
 };
 
@@ -68,17 +86,21 @@ export const buildCompareDebugResult = (
   pdfWorkItemsBeforeSplit: number,
   pdfWorkItems: WorkItem[],
   excelWorkItems: WorkItem[],
-  results: CompareResult[]
+  resultsBeforeScope: CompareResult[],
+  resultsAfterScope: CompareResult[],
+  offerScope: OfferScope
 ): PdfExcelCompareDebugResult => ({
   summary: buildCompareSummary(
     pdfWorkItemsBeforeSplit,
     pdfWorkItems,
     excelWorkItems,
-    results
+    resultsBeforeScope,
+    resultsAfterScope,
+    offerScope
   ),
   pdfWorkItems,
   excelWorkItems,
-  results,
+  results: resultsAfterScope,
 });
 
 export const comparePdfSpecificationWithExcelOffer = async (
@@ -115,12 +137,16 @@ export const comparePdfSpecificationWithExcelOffer = async (
   const unsplitPdfWorkItems = mapPdfCandidatesToWorkItems(candidates);
   const pdfWorkItems = splitPdfCompositeWorkItems(unsplitPdfWorkItems);
   const excelWorkItems = parseOfferExcelData(excelData);
-  const results = compareWorkItems(pdfWorkItems, excelWorkItems);
+  const offerScope = detectOfferScope(excelWorkItems);
+  const resultsBeforeScope = compareWorkItems(pdfWorkItems, excelWorkItems);
+  const results = applyOfferScopeToResults(resultsBeforeScope, offerScope);
   const debugResult = buildCompareDebugResult(
     unsplitPdfWorkItems.length,
     pdfWorkItems,
     excelWorkItems,
-    results
+    resultsBeforeScope,
+    results,
+    offerScope
   );
   const resolvedOutputPath = resolve(outputPath);
 
@@ -138,9 +164,30 @@ export const comparePdfSpecificationWithExcelOffer = async (
       `${debugResult.summary.pdfWorkItemsAfterSplit}`
   );
   console.log(`Excel offer WorkItems: ${debugResult.summary.excelWorkItems}`);
-  console.log("Status counts:");
+  console.log("Detected offer scope:");
+  console.log(
+    JSON.stringify(
+      {
+        detectedBrands: offerScope.detectedBrands,
+        dominantBrands: offerScope.dominantBrands,
+        confidence: offerScope.confidence,
+        reasons: offerScope.reasons,
+      },
+      null,
+      2
+    )
+  );
+  console.log("Status counts before scope filtering:");
   for (const status of compareStatuses) {
-    console.log(`- ${status}: ${debugResult.summary.statusCounts[status]}`);
+    console.log(
+      `- ${status}: ${debugResult.summary.statusCountsBeforeScope[status]}`
+    );
+  }
+  console.log("Status counts after scope filtering:");
+  for (const status of compareStatuses) {
+    console.log(
+      `- ${status}: ${debugResult.summary.statusCountsAfterScope[status]}`
+    );
   }
   console.log("First 30 comparison results:");
   console.log(JSON.stringify(results.slice(0, 30), null, 2));

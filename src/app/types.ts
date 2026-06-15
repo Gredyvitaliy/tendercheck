@@ -14,6 +14,7 @@ export type CompareResultStatus =
   | "Размер отличается"
   | "Частичное совпадение"
   | "Нет в КП"
+  | "Вне области КП"
   | "Есть в КП, нет в спецификации";
 
 export type CompareResult = {

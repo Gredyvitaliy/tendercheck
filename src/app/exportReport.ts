@@ -17,6 +17,9 @@ const getStatusComment = (item: CompareResult) => {
   if (item.status === "Частичное совпадение") {
     return "Найдена похожая позиция. Требуется ручная проверка наименования, модели или характеристик.";
   }
+  if (item.status === "Вне области КП") {
+    return "Позиция спецификации не относится к определенной области этого КП.";
+  }
 if (item.status === "Есть в КП, нет в спецификации") {
   return "В КП есть дополнительная позиция, которой нет в спецификации. Требуется проверить: это допработа, лишняя строка или ошибка подрядчика.";
 }
@@ -46,6 +49,11 @@ export const exportResultsToExcel = (results: CompareResult[]) => {
     {
       Статус: "Нет в КП",
       Количество: results.filter((item) => item.status === "Нет в КП").length,
+    },
+    {
+      Статус: "Вне области КП",
+      Количество: results.filter((item) => item.status === "Вне области КП")
+        .length,
     },
     {
   Статус: "Есть в КП, нет в спецификации",
@@ -173,6 +181,10 @@ export const exportResultsToExcel = (results: CompareResult[]) => {
     if (status === "Нет в КП") {
       fillColor = "FEE2E2";
       fontColor = "991B1B";
+    }
+    if (status === "Вне области КП") {
+      fillColor = "F3F4F6";
+      fontColor = "4B5563";
     }
     if (status === "Есть в КП, нет в спецификации") {
   fillColor = "DBEAFE";
