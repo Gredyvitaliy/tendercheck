@@ -152,12 +152,10 @@ const model = String(row[modelIndex] || "").trim();
 
   reader.readAsBinaryString(file);
 }
-export function parseOfferExcel(file: File, callback: (items: WorkItem[]) => void) {
-  const reader = new FileReader();
-
-  reader.onload = (evt) => {
-    const binaryStr = evt.target?.result;
-    const workbook = XLSX.read(binaryStr, { type: "binary" });
+export function parseOfferExcelData(
+  data: ArrayBuffer | Uint8Array
+): WorkItem[] {
+    const workbook = XLSX.read(data, { type: "array" });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
 
@@ -343,8 +341,25 @@ export function parseOfferExcel(file: File, callback: (items: WorkItem[]) => voi
       })
       .filter(Boolean) as WorkItem[];
 
-    callback(normalized);
+    return normalized;
+}
+
+export function parseOfferExcel(
+  file: File,
+  callback: (items: WorkItem[]) => void
+) {
+  const reader = new FileReader();
+
+  reader.onload = (evt) => {
+    const data = evt.target?.result;
+
+    if (!(data instanceof ArrayBuffer)) {
+      callback([]);
+      return;
+    }
+
+    callback(parseOfferExcelData(data));
   };
 
-  reader.readAsBinaryString(file);
+  reader.readAsArrayBuffer(file);
 }
