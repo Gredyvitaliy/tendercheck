@@ -17,6 +17,12 @@ const getStatusComment = (item: CompareResult) => {
   if (item.status === "Частичное совпадение") {
     return "Найдена похожая позиция. Требуется ручная проверка наименования, модели или характеристик.";
   }
+  if (item.status === "Агрегированная позиция") {
+    return "Позиция является агрегированной строкой установки; дочерние комплектующие найдены в КП.";
+  }
+  if (item.status === "Количество в PDF не распознано") {
+    return "Позиция найдена в КП, но количество или единица измерения в PDF не распознаны. Требуется ручная проверка количества.";
+  }
   if (item.status === "Вне области КП") {
     return "Позиция спецификации не относится к определенной области этого КП.";
   }
@@ -44,6 +50,17 @@ export const exportResultsToExcel = (results: CompareResult[]) => {
       Статус: "Частичное совпадение",
       Количество: results.filter(
         (item) => item.status === "Частичное совпадение"
+      ).length,
+    },
+    {
+      Статус: "Агрегированная позиция",
+      Количество: results.filter((item) => item.status === "Агрегированная позиция")
+        .length,
+    },
+    {
+      Статус: "Количество в PDF не распознано",
+      Количество: results.filter(
+        (item) => item.status === "Количество в PDF не распознано"
       ).length,
     },
     {
@@ -176,6 +193,14 @@ export const exportResultsToExcel = (results: CompareResult[]) => {
     if (status === "Частичное совпадение") {
       fillColor = "FEF9C3";
       fontColor = "854D0E";
+    }
+    if (status === "Агрегированная позиция") {
+      fillColor = "E0F2FE";
+      fontColor = "075985";
+    }
+    if (status === "Количество в PDF не распознано") {
+      fillColor = "F5F3FF";
+      fontColor = "5B21B6";
     }
 
     if (status === "Нет в КП") {

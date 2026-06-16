@@ -33,6 +33,47 @@ const getEquipmentCategory = (item: WorkItem) => {
   return equipmentCategories.find((category) => text.includes(` ${category} `));
 };
 
+type EquipmentCategoryDefinition = {
+  key: string;
+  label: string;
+  codes: string[];
+  keywords: string[];
+};
+
+const equipmentCategoryDefinitions: EquipmentCategoryDefinition[] = [
+  { key: "cooler", label: "RW/воздухоохладитель", codes: ["rw"], keywords: ["воздухоохладитель", "охладитель"] },
+  { key: "heater", label: "WH/воздухонагреватель", codes: ["wh"], keywords: ["воздухонагреватель", "нагреватель"] },
+  { key: "recuperator_supply", label: "RGP/рекуператор приточная", codes: ["rgp"], keywords: ["рекуператор приточная"] },
+  { key: "recuperator_exhaust", label: "RGV/рекуператор вытяжная", codes: ["rgv"], keywords: ["рекуператор вытяжная"] },
+  { key: "short_filter_housing", label: "FRUM/корпус фильтра укороченного", codes: ["frum"], keywords: ["корпус фильтра укороченного"] },
+  { key: "short_filter_insert", label: "DFUM/вставка карманная укороченная", codes: ["dfum"], keywords: ["вставка карманная укороченная"] },
+  { key: "damper", label: "CHR/заслонка", codes: ["chr"], keywords: ["заслонк"] },
+  { key: "flexible_insert", label: "FH/вставка гибкая", codes: ["fh"], keywords: ["вставка гибкая"] },
+  { key: "filter_housing", label: "FRPM/корпус фильтра", codes: ["frpm"], keywords: ["корпус фильтра"] },
+  { key: "filter_insert", label: "DFPM/вставка карманная", codes: ["dfpm"], keywords: ["вставка карманная"] },
+  { key: "silencer", label: "NKD/шумоглушитель", codes: ["nkd"], keywords: ["шумоглушитель"] },
+  { key: "fan", label: "G1/REZ/вентилятор", codes: ["g1", "rez"], keywords: ["вентилятор"] },
+  { key: "empty_section", label: "PSK/пустая секция", codes: ["psk"], keywords: ["пустая секция"] },
+  { key: "roof", label: "крыша", codes: [], keywords: ["крыша", "крыш"] },
+  { key: "grille", label: "решетка", codes: [], keywords: ["решетка", "решётка", "воздухозаборная решетка", "воздухозаборная решётка"] },
+];
+
+const getEquipmentSignature = (item: WorkItem) => {
+  const normalized = normalizeText(`${item.name} ${item.rate}`);
+  const tokens = normalized.split(" ");
+
+  return equipmentCategoryDefinitions.find(
+    (definition) =>
+      definition.codes.some((code) => tokens.includes(code)) ||
+      definition.keywords.some((keyword) =>
+        normalized.includes(normalizeText(keyword))
+      )
+  );
+};
+
+const formatEquipmentSignature = (signature: EquipmentCategoryDefinition) =>
+  signature.label;
+
 export const getSideFeature = (item: WorkItem) => {
   const tokens = normalizeText(`${item.name} ${item.rate}`).split(" ");
 
@@ -91,6 +132,23 @@ export const matchEquipment = (
     return {
       canCompare: false,
       reason: "Категории оборудования разные",
+      isStrongMatch: false,
+    };
+  }
+
+  const specEquipmentSignature = getEquipmentSignature(spec);
+  const offerEquipmentSignature = getEquipmentSignature(offer);
+
+  if (
+    specEquipmentSignature &&
+    offerEquipmentSignature &&
+    specEquipmentSignature.key !== offerEquipmentSignature.key
+  ) {
+    return {
+      canCompare: false,
+      reason: `Явные категории оборудования разные: ${formatEquipmentSignature(
+        specEquipmentSignature
+      )} ≠ ${formatEquipmentSignature(offerEquipmentSignature)}`,
       isStrongMatch: false,
     };
   }

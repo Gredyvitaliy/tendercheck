@@ -194,6 +194,14 @@ export default function Home() {
     (item) => item.status === "Нет в КП"
   ).length;
 
+  const aggregatedCount = results.filter(
+    (item) => item.status === "Агрегированная позиция"
+  ).length;
+
+  const unrecognizedQuantityCount = results.filter(
+    (item) => item.status === "Количество в PDF не распознано"
+  ).length;
+
   const outOfScopeCount = results.filter(
     (item) => item.status === "Вне области КП"
   ).length;
@@ -384,6 +392,8 @@ export default function Home() {
           <p>Объем отличается: {volumeDiffCount}</p>
           <p>Размер отличается: {sizeDiffCount}</p>
           <p>Частичное совпадение: {partialCount}</p>
+          <p>Агрегированная позиция: {aggregatedCount}</p>
+          <p>Количество в PDF не распознано: {unrecognizedQuantityCount}</p>
           <p>Нет в КП в зоне КП: {missingCount}</p>
           <p>Вне области КП: {outOfScopeCount}</p>
           <p>Есть в КП, нет в спецификации: {extraOfferCount}</p>
@@ -491,6 +501,20 @@ export default function Home() {
             className="bg-red-100 hover:bg-red-200 text-red-800 px-4 py-2 rounded-lg text-sm font-semibold"
           >
             Нет в КП
+          </button>
+
+          <button
+            onClick={() => setStatusFilter("Агрегированная позиция")}
+            className="bg-sky-100 hover:bg-sky-200 text-sky-800 px-4 py-2 rounded-lg text-sm font-semibold"
+          >
+            Агрегированная
+          </button>
+
+          <button
+            onClick={() => setStatusFilter("Количество в PDF не распознано")}
+            className="bg-violet-100 hover:bg-violet-200 text-violet-800 px-4 py-2 rounded-lg text-sm font-semibold"
+          >
+            Количество не распознано
           </button>
 
           <button

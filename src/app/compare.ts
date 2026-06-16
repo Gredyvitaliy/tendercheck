@@ -43,6 +43,72 @@ const groupWorkItems = (items: WorkItem[]) => {
   );
 };
 
+const matchedStatuses = new Set<CompareResult["status"]>([
+  "ОК",
+  "Объем отличается",
+  "Размер отличается",
+  "Частичное совпадение",
+  "Количество в PDF не распознано",
+]);
+
+const isAirnedParentInstallationResult = (result: CompareResult) => {
+  const text = normalizeText(`${result.name} ${result.rate}`);
+
+  return text.includes("установка") && text.includes("airned");
+};
+
+const hasNedFamilyText = (result: CompareResult) => {
+  const text = normalizeText(
+    `${result.name} ${result.rate} ${result.offerName} ${result.offerRate}`
+  );
+
+  return text.includes("litened") || text.includes("airned") || text.includes("ned");
+};
+
+const hasMatchedNedFamilyChild = (
+  result: CompareResult,
+  results: CompareResult[]
+) =>
+  results.some(
+    (candidate) =>
+      candidate !== result &&
+      candidate.name !== "-" &&
+      candidate.offerName !== "-" &&
+      matchedStatuses.has(candidate.status) &&
+      !isAirnedParentInstallationResult(candidate) &&
+      hasNedFamilyText(candidate)
+  );
+
+const postProcessCompareResults = (results: CompareResult[]): CompareResult[] =>
+  results.map((result) => {
+    if (
+      result.status === "Нет в КП" &&
+      isAirnedParentInstallationResult(result) &&
+      hasMatchedNedFamilyChild(result, results)
+    ) {
+      return {
+        ...result,
+        status: "Агрегированная позиция",
+        reason:
+          "Агрегированная AIRNED-позиция: в КП найдены дочерние NED/LITENED комплектующие, поэтому строка не считается обычным отсутствием.",
+      };
+    }
+
+    if (
+      result.status === "Объем отличается" &&
+      result.offerName !== "-" &&
+      (Number(result.specVolume) === 0 || !String(result.unit || "").trim())
+    ) {
+      return {
+        ...result,
+        status: "Количество в PDF не распознано",
+        reason: `${result.reason}. Количество в PDF не распознано, расхождение объема требует ручной проверки.`,
+      };
+    }
+
+    return result;
+  });
+
 export const compareWorkItems = (
   specItems: WorkItem[],
   offerItems: WorkItem[]
@@ -88,6 +154,9 @@ export const compareWorkItems = (
       }
 
       if (equipmentMatch && !equipmentMatch.canCompare) {
+        if (!bestReason) {
+          bestReason = `Стратегия: ${specStrategy}. ${equipmentMatch.reason}`;
+        }
         return;
       }
 
@@ -243,6 +312,8 @@ export const compareWorkItems = (
     ? `Стратегия: ${specStrategy}. Лучшее совпадение ${Math.round(
         bestSimilarity
       )}%, ниже порога ${missingThreshold}%`
+    : bestReason
+      ? bestReason
     : `Стратегия: ${specStrategy}. Подходящая позиция в КП не найдена`,
       };
     }
@@ -347,5 +418,5 @@ export const compareWorkItems = (
       reason: "Позиция КП не была использована в сравнении",
     }));
 
-  return [...comparison, ...extraOfferItems];
+  return postProcessCompareResults([...comparison, ...extraOfferItems]);
 };
