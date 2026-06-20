@@ -13,13 +13,18 @@ import {
   detectOfferScope,
   type OfferScope,
 } from "./matching/detectOfferScope";
-import { loadProjectPdfWorkItems } from "./projectPdf/loadProjectPdfWorkItems";
+import {
+  ProjectPdfProcessingError,
+  loadProjectPdfWorkItems,
+} from "./projectPdf/loadProjectPdfWorkItems";
+import type { PdfTextLayerDiagnostics } from "./projectPdf/pdfTextDiagnostics";
 
 type SpecificationSource = "excel" | "pdf";
 
 type PdfDiagnostics = {
-  beforeSplitCount: number;
-  afterSplitCount: number;
+  beforeSplitCount?: number;
+  afterSplitCount?: number;
+  technicalInfo?: PdfTextLayerDiagnostics;
   offerScope: OfferScope;
   statusCountsBeforeScope: Record<string, number>;
   statusCountsAfterScope: Record<string, number>;
@@ -135,6 +140,7 @@ export default function Home() {
       setPdfDiagnostics({
         beforeSplitCount: pdfResult.beforeSplitCount,
         afterSplitCount: pdfResult.afterSplitCount,
+        technicalInfo: pdfResult.technicalInfo,
         offerScope,
         statusCountsBeforeScope,
         statusCountsAfterScope,
@@ -151,7 +157,16 @@ export default function Home() {
       });
     } catch (error) {
       setResults([]);
-      setPdfDiagnostics(null);
+      setPdfDiagnostics(
+        error instanceof ProjectPdfProcessingError && error.technicalInfo
+          ? {
+              technicalInfo: error.technicalInfo,
+              offerScope: detectOfferScope(offerItems),
+              statusCountsBeforeScope: {},
+              statusCountsAfterScope: {},
+            }
+          : null
+      );
       setProcessingError(
         error instanceof Error
           ? error.message
@@ -387,6 +402,22 @@ export default function Home() {
           <p>
             PDF WorkItems after split:{" "}
             {pdfDiagnostics?.afterSplitCount ?? "-"}
+          </p>
+          <p>
+            PDF extractedTextLength:{" "}
+            {pdfDiagnostics?.technicalInfo?.extractedTextLength ?? "-"}
+          </p>
+          <p>
+            PDF pagesWithTextCount:{" "}
+            {pdfDiagnostics?.technicalInfo?.pagesWithTextCount ?? "-"}
+          </p>
+          <p>
+            PDF likelyScannedOrDrawingPdf:{" "}
+            {pdfDiagnostics?.technicalInfo
+              ? String(
+                  pdfDiagnostics.technicalInfo.likelyScannedOrDrawingPdf
+                )
+              : "-"}
           </p>
           <p>ОК: {okCount}</p>
           <p>Объем отличается: {volumeDiffCount}</p>

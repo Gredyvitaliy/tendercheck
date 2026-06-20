@@ -1,9 +1,21 @@
 import type { ProjectPdfWorkItemsResponse } from "../api/project-pdf/work-items/route";
+import type { PdfTextLayerDiagnostics } from "./pdfTextDiagnostics";
 
 type ErrorResponse = {
   error?: string;
   details?: string;
+  technicalInfo?: PdfTextLayerDiagnostics;
 };
+
+export class ProjectPdfProcessingError extends Error {
+  constructor(
+    message: string,
+    public readonly technicalInfo?: PdfTextLayerDiagnostics
+  ) {
+    super(message);
+    this.name = "ProjectPdfProcessingError";
+  }
+}
 
 export const loadProjectPdfWorkItems = async (
   file: File,
@@ -22,10 +34,11 @@ export const loadProjectPdfWorkItems = async (
 
   if (!response.ok) {
     const errorBody = body as ErrorResponse;
-    throw new Error(
+    throw new ProjectPdfProcessingError(
       errorBody.details ??
         errorBody.error ??
-        "Failed to process PDF project"
+        "Failed to process PDF project",
+      errorBody.technicalInfo
     );
   }
 

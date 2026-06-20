@@ -35,6 +35,11 @@ test("returns the PDF work item response contract", async () => {
     },
     beforeSplitCount: 1,
     afterSplitCount: 1,
+    technicalInfo: {
+      extractedTextLength: 1200,
+      pagesWithTextCount: 19,
+      likelyScannedOrDrawingPdf: false,
+    },
     workItems,
   }));
 
@@ -50,6 +55,11 @@ test("returns the PDF work item response contract", async () => {
     },
     beforeSplitCount: 1,
     afterSplitCount: 1,
+    technicalInfo: {
+      extractedTextLength: 1200,
+      pagesWithTextCount: 19,
+      likelyScannedOrDrawingPdf: false,
+    },
     workItems,
   });
 });
@@ -81,6 +91,34 @@ test("returns a readable error when the specification section is absent", async 
   assert.deepEqual(await response.json(), {
     error: "PDF processing failed",
     details: "Specification section was not found",
+  });
+});
+
+test("returns OCR guidance and text diagnostics for an empty text layer PDF", async () => {
+  const technicalInfo = {
+    extractedTextLength: 0,
+    pagesWithTextCount: 0,
+    likelyScannedOrDrawingPdf: true,
+  };
+  const handler = createPostHandler(async () => {
+    const error = new Error(
+      "PDF не содержит извлекаемого текстового слоя. Для этого файла нужен OCR/распознавание чертежа."
+    );
+    Object.assign(error, {
+      code: "PDF_TEXT_LAYER_EMPTY",
+      technicalInfo,
+    });
+    throw error;
+  });
+
+  const response = await handler(requestWithFile());
+
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), {
+    error: "PDF processing failed",
+    details:
+      "PDF не содержит извлекаемого текстового слоя. Для этого файла нужен OCR/распознавание чертежа.",
+    technicalInfo,
   });
 });
 

@@ -1,6 +1,10 @@
 import { detectSpecificationSection } from "../../../projectPdf/detectSpecificationSection";
 import { extractSpecificationRowCandidates } from "../../../projectPdf/extractSpecificationRows";
 import { mapPdfCandidatesToWorkItems } from "../../../projectPdf/mapPdfCandidatesToWorkItems";
+import {
+  getPdfTextLayerDiagnostics,
+  type PdfTextLayerDiagnostics,
+} from "../../../projectPdf/pdfTextDiagnostics";
 import { extractPdfPageTexts } from "../../../projectPdf/pdfTextExtractor";
 import { splitPdfCompositeWorkItems } from "../../../projectPdf/splitPdfCompositeWorkItems";
 import type { WorkItem } from "../../../types";
@@ -22,6 +26,7 @@ export interface ProjectPdfWorkItemsResponse {
   specificationSection: SpecificationSection;
   beforeSplitCount: number;
   afterSplitCount: number;
+  technicalInfo: PdfTextLayerDiagnostics;
   workItems: WorkItem[];
 }
 
@@ -38,11 +43,27 @@ class SpecificationSectionNotFoundError extends Error {
   }
 }
 
+class PdfTextLayerEmptyError extends Error {
+  readonly code = "PDF_TEXT_LAYER_EMPTY";
+
+  constructor(public readonly technicalInfo: PdfTextLayerDiagnostics) {
+    super(
+      "PDF не содержит извлекаемого текстового слоя. Для этого файла нужен OCR/распознавание чертежа."
+    );
+    this.name = "PdfTextLayerEmptyError";
+  }
+}
+
 const processProjectPdf: ProjectPdfPipeline = async (data) => {
   const pages = await extractPdfPageTexts(data);
+  const technicalInfo = getPdfTextLayerDiagnostics(pages);
   const specificationSection = detectSpecificationSection(pages);
 
   if (!specificationSection) {
+    if (technicalInfo.likelyScannedOrDrawingPdf) {
+      throw new PdfTextLayerEmptyError(technicalInfo);
+    }
+
     throw new SpecificationSectionNotFoundError();
   }
 
@@ -57,6 +78,7 @@ const processProjectPdf: ProjectPdfPipeline = async (data) => {
     specificationSection,
     beforeSplitCount: beforeSplit.length,
     afterSplitCount: workItems.length,
+    technicalInfo,
     workItems,
   };
 };
@@ -66,6 +88,40 @@ const hasErrorCode = (
   code: string
 ): error is Error & { code: string } =>
   error instanceof Error && "code" in error && error.code === code;
+
+const isPdfTextLayerDiagnostics = (
+  value: unknown
+): value is PdfTextLayerDiagnostics => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate.extractedTextLength === "number" &&
+    typeof candidate.pagesWithTextCount === "number" &&
+    typeof candidate.likelyScannedOrDrawingPdf === "boolean"
+  );
+};
+
+const getErrorTechnicalInfo = (
+  error: unknown
+): PdfTextLayerDiagnostics | undefined => {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "technicalInfo" in error
+  ) {
+    const technicalInfo = error.technicalInfo;
+
+    if (isPdfTextLayerDiagnostics(technicalInfo)) {
+      return technicalInfo;
+    }
+  }
+
+  return undefined;
+};
 
 export const createPostHandler =
   (
@@ -127,6 +183,23 @@ export const createPostHandler =
         });
         return Response.json(
           { error: "PDF processing failed", details: error.message },
+          { status: 422 }
+        );
+      }
+
+      if (hasErrorCode(error, "PDF_TEXT_LAYER_EMPTY")) {
+        console.warn("PDF work items processing failed", {
+          ...fileMetadata,
+          processingTimeMs,
+          errorCode: error.code,
+          technicalInfo: getErrorTechnicalInfo(error),
+        });
+        return Response.json(
+          {
+            error: "PDF processing failed",
+            details: error.message,
+            technicalInfo: getErrorTechnicalInfo(error),
+          },
           { status: 422 }
         );
       }

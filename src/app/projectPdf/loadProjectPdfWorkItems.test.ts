@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { loadProjectPdfWorkItems } from "./loadProjectPdfWorkItems";
+import {
+  loadProjectPdfWorkItems,
+  ProjectPdfProcessingError,
+} from "./loadProjectPdfWorkItems";
 
 test("uploads a PDF and returns the work item response", async () => {
   const expected = {
@@ -13,6 +16,11 @@ test("uploads a PDF and returns the work item response", async () => {
     },
     beforeSplitCount: 83,
     afterSplitCount: 271,
+    technicalInfo: {
+      extractedTextLength: 5000,
+      pagesWithTextCount: 19,
+      likelyScannedOrDrawingPdf: false,
+    },
     workItems: [],
   };
   let receivedBody: BodyInit | null | undefined;
@@ -47,5 +55,38 @@ test("throws API error details for a failed PDF upload", async () => {
         fetcher
       ),
     /PDF signature is invalid/
+  );
+});
+
+test("preserves technical info from a failed PDF upload", async () => {
+  const technicalInfo = {
+    extractedTextLength: 0,
+    pagesWithTextCount: 0,
+    likelyScannedOrDrawingPdf: true,
+  };
+  const fetcher: typeof fetch = async () =>
+    Response.json(
+      {
+        error: "PDF processing failed",
+        details:
+          "PDF не содержит извлекаемого текстового слоя. Для этого файла нужен OCR/распознавание чертежа.",
+        technicalInfo,
+      },
+      { status: 422 }
+    );
+
+  await assert.rejects(
+    async () =>
+      loadProjectPdfWorkItems(
+        new File(["%PDF-1.7"], "project.pdf", {
+          type: "application/pdf",
+        }),
+        fetcher
+      ),
+    (error) =>
+      error instanceof ProjectPdfProcessingError &&
+      error.message ===
+        "PDF не содержит извлекаемого текстового слоя. Для этого файла нужен OCR/распознавание чертежа." &&
+      assert.deepEqual(error.technicalInfo, technicalInfo) === undefined
   );
 });
