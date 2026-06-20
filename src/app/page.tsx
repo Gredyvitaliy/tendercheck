@@ -17,13 +17,21 @@ import {
   ProjectPdfProcessingError,
   loadProjectPdfWorkItems,
 } from "./projectPdf/loadProjectPdfWorkItems";
+import {
+  ArWindowsPdfCompareError,
+  loadArWindowsPdfCompare,
+} from "./projectPdf/arWindows/loadArWindowsPdfCompare";
 import type { PdfTextLayerDiagnostics } from "./projectPdf/pdfTextDiagnostics";
 
 type SpecificationSource = "excel" | "pdf";
+type PdfProjectMode = "text" | "arWindows";
 
 type PdfDiagnostics = {
+  mode?: PdfProjectMode;
   beforeSplitCount?: number;
   afterSplitCount?: number;
+  arWorkItemsCount?: number;
+  excelOfferWorkItemsCount?: number;
   technicalInfo?: PdfTextLayerDiagnostics;
   offerScope: OfferScope;
   statusCountsBeforeScope: Record<string, number>;
@@ -41,10 +49,13 @@ const countStatuses = (
 export default function Home() {
   const [specificationSource, setSpecificationSource] =
     useState<SpecificationSource>("excel");
+  const [pdfProjectMode, setPdfProjectMode] =
+    useState<PdfProjectMode>("text");
   const [specItems, setSpecItems] = useState<WorkItem[]>([]);
   const [offerItems, setOfferItems] = useState<WorkItem[]>([]);
   const [results, setResults] = useState<CompareResult[]>([]);
   const [projectPdf, setProjectPdf] = useState<File | null>(null);
+  const [offerFile, setOfferFile] = useState<File | null>(null);
   const [pdfDiagnostics, setPdfDiagnostics] =
     useState<PdfDiagnostics | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -78,6 +89,11 @@ export default function Home() {
   const file = e.target.files?.[0];
   if (!file) return;
 
+  setOfferFile(file);
+  setPdfDiagnostics(null);
+  setProcessingError("");
+  setResults([]);
+
   parseOfferExcel(file, (items) => {
     setOfferItems(items);
   });
@@ -88,6 +104,8 @@ export default function Home() {
     setOfferItems([]);
     setResults([]);
     setProjectPdf(null);
+    setOfferFile(null);
+    setPdfProjectMode("text");
     setPdfDiagnostics(null);
     setProcessingError("");
     setIsProcessing(false);
@@ -99,12 +117,12 @@ export default function Home() {
   const compareFiles = async () => {
     setProcessingError("");
 
-    if (offerItems.length === 0) {
-      setProcessingError("Загрузите Excel КП подрядчика");
-      return;
-    }
-
     if (specificationSource === "excel") {
+      if (offerItems.length === 0) {
+        setProcessingError("Загрузите Excel КП подрядчика");
+        return;
+      }
+
       if (specItems.length === 0) {
         setProcessingError("Загрузите Excel спецификацию");
         return;
@@ -117,6 +135,56 @@ export default function Home() {
 
     if (!projectPdf) {
       setProcessingError("Загрузите PDF проекта");
+      return;
+    }
+
+    if (pdfProjectMode === "arWindows") {
+      if (!offerFile) {
+        setProcessingError("Загрузите Excel КП подрядчика");
+        return;
+      }
+
+      setIsProcessing(true);
+
+      try {
+        const arResult = await loadArWindowsPdfCompare(projectPdf, offerFile);
+        const offerScope = detectOfferScope(offerItems);
+
+        setSpecItems(arResult.arWorkItems);
+        setPdfDiagnostics({
+          mode: "arWindows",
+          arWorkItemsCount: arResult.arWorkItemsCount,
+          excelOfferWorkItemsCount: arResult.excelOfferWorkItemsCount,
+          technicalInfo: arResult.technicalInfo,
+          offerScope,
+          statusCountsBeforeScope: arResult.statusCounts,
+          statusCountsAfterScope: arResult.statusCounts,
+        });
+        setResults(arResult.results);
+
+        console.info("AR windows PDF project comparison", {
+          arWorkItemsCount: arResult.arWorkItemsCount,
+          excelOfferWorkItemsCount: arResult.excelOfferWorkItemsCount,
+          statusCounts: arResult.statusCounts,
+          technicalInfo: arResult.technicalInfo,
+        });
+      } catch (error) {
+        setResults([]);
+        setPdfDiagnostics(null);
+        setProcessingError(
+          error instanceof ArWindowsPdfCompareError || error instanceof Error
+            ? error.message
+            : "Не удалось сравнить PDF АР окна / витражи с Excel КП"
+        );
+      } finally {
+        setIsProcessing(false);
+      }
+
+      return;
+    }
+
+    if (offerItems.length === 0) {
+      setProcessingError("Загрузите Excel КП подрядчика");
       return;
     }
 
@@ -138,6 +206,7 @@ export default function Home() {
 
       setSpecItems(pdfResult.workItems);
       setPdfDiagnostics({
+        mode: "text",
         beforeSplitCount: pdfResult.beforeSplitCount,
         afterSplitCount: pdfResult.afterSplitCount,
         technicalInfo: pdfResult.technicalInfo,
@@ -297,6 +366,45 @@ export default function Home() {
             PDF проект
           </label>
         </div>
+        {specificationSource === "pdf" && (
+          <div className="mt-4">
+            <p className="mb-2 text-sm font-semibold text-gray-700">
+              Режим обработки PDF
+            </p>
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="pdf-project-mode"
+                  value="text"
+                  checked={pdfProjectMode === "text"}
+                  onChange={() => {
+                    setPdfProjectMode("text");
+                    setPdfDiagnostics(null);
+                    setProcessingError("");
+                    setResults([]);
+                  }}
+                />
+                Обычная спецификация
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="pdf-project-mode"
+                  value="arWindows"
+                  checked={pdfProjectMode === "arWindows"}
+                  onChange={() => {
+                    setPdfProjectMode("arWindows");
+                    setPdfDiagnostics(null);
+                    setProcessingError("");
+                    setResults([]);
+                  }}
+                />
+                АР окна / витражи
+              </label>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -372,7 +480,8 @@ export default function Home() {
           specItems.length === 0 &&
           offerItems.length === 0 &&
           results.length === 0 &&
-          projectPdf === null
+          projectPdf === null &&
+          offerFile === null
         }
         className="ml-4 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-xl text-lg mb-8"
       >
@@ -394,7 +503,23 @@ export default function Home() {
                   ? "сравнение завершено"
                   : "ожидание файлов"}
           </p>
+          <p>
+            PDF mode:{" "}
+            {specificationSource === "pdf"
+              ? pdfProjectMode === "arWindows"
+                ? "АР окна / витражи"
+                : "Обычная спецификация"
+              : "-"}
+          </p>
           <p>Excel offer WorkItems: {offerItems.length}</p>
+          <p>
+            AR WorkItems count:{" "}
+            {pdfDiagnostics?.arWorkItemsCount ?? "-"}
+          </p>
+          <p>
+            AR Excel offer WorkItems count:{" "}
+            {pdfDiagnostics?.excelOfferWorkItemsCount ?? "-"}
+          </p>
           <p>
             PDF WorkItems before split:{" "}
             {pdfDiagnostics?.beforeSplitCount ?? "-"}
