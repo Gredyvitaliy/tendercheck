@@ -2,16 +2,40 @@ import type { WorkItem } from "../types";
 import { normalizeText } from "../utils";
 import { extractItemFeatures } from "../itemFeatures";
 
-export const getPrimaryMark = (item: WorkItem) => {
-  const rateFeatures = extractItemFeatures(item.rate || "");
+const getMostSpecificMark = (marks: string[]) =>
+  marks.reduce((best, mark) => (mark.length > best.length ? mark : best), "");
 
-  if (rateFeatures.marks.length > 0) {
-    return rateFeatures.marks[0];
+const getBaseMark = (mark: string) => {
+  const match = mark.match(/^([a-z]+-\d+)/i);
+
+  return match ? match[1] : mark;
+};
+
+export const getPrimaryMark = (item: WorkItem) => {
+  const positionFeatures = extractItemFeatures(item.position || "");
+
+  if (positionFeatures.marks.length > 0) {
+    return getMostSpecificMark(positionFeatures.marks);
   }
 
+  const rateFeatures = extractItemFeatures(item.rate || "");
   const nameFeatures = extractItemFeatures(item.name || "");
+  const rateMark = getMostSpecificMark(rateFeatures.marks);
+  const nameMark = getMostSpecificMark(nameFeatures.marks);
 
-  return nameFeatures.marks[nameFeatures.marks.length - 1] || "";
+  if (rateMark) {
+    if (
+      nameMark &&
+      nameMark.length > rateMark.length &&
+      getBaseMark(nameMark) === getBaseMark(rateMark)
+    ) {
+      return nameMark;
+    }
+
+    return rateMark;
+  }
+
+  return nameMark;
 };
 
 export const isAirnedInstallation = (item: WorkItem) => {

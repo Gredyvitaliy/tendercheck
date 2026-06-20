@@ -148,3 +148,47 @@ test("allows RW cooler to match another RW cooler", () => {
   assert.notEqual(result.status, "Нет в КП");
   assert.notEqual(result.offerName, "-");
 });
+test("matches AR window marks with cyrillic B and significant suffixes", () => {
+  const spec = item({
+    name: "B-6(\u0437\u0435\u0440) Window B-6 (2000 x 2380)",
+    rate: "",
+    position: "B-6(\u0437\u0435\u0440)",
+  });
+  const baseOffer = item({
+    name: "\u0412-6 Window",
+    rate: "",
+  });
+  const suffixedOffer = item({
+    name: "\u0412-6(\u0437\u0435\u0440) Window",
+    rate: "",
+  });
+
+  const [result] = compareWorkItems([spec], [baseOffer, suffixedOffer]);
+
+  assert.equal(result.offerName, suffixedOffer.name);
+});
+
+test("keeps starred AR window marks in separate groups", () => {
+  const specBase = item({
+    name: "B-7 Window",
+    position: "B-7",
+  });
+  const specStar = item({
+    name: "B-7* Window",
+    position: "B-7*",
+  });
+  const offerBase = item({
+    name: "\u0412-7 Window",
+  });
+  const offerStar = item({
+    name: "\u0412-7* Window",
+  });
+
+  const results = compareWorkItems(
+    [specBase, specStar],
+    [offerBase, offerStar]
+  );
+
+  assert.equal(results.filter((result) => result.status === "ОК").length, 2);
+  assert.ok(results.some((result) => result.name === specStar.name));
+});

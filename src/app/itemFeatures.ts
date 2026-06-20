@@ -1,5 +1,6 @@
 import type { WorkItem } from "./types";
 import { normalizeText } from "./utils";
+import { normalizeWindowMark } from "./matching/normalizeWindowMark";
 
 export type ItemFeatures = {
   text: string;
@@ -13,38 +14,17 @@ const extractPositionMarks = (text: string) => {
   const normalized = String(text)
     .toLowerCase()
     .replace(/[–—]/g, "-")
-    .replace(/в/g, "b")
+    .replace(/[\u0412\u0432]/g, "b")
     .replace(/п/g, "p")
     .replace(/д/g, "d");
 
   const matches = Array.from(
-    normalized.matchAll(/(?:^|[^a-zа-я0-9])((?:bp|b|pd)\s*[-]?\s*\d+)/gi)
+    normalized.matchAll(
+      /(?:^|[^a-zа-я0-9])((?:bp|b|pd)\s*[-]?\s*\d+(?:\s*\([^)]*\)|\s*\*)?)/gi
+    )
   );
 
-  return matches.map((match) => {
-    let cleaned = match[1]
-      .toLowerCase()
-      .replace(/\s+/g, "")
-      .replace(/[–—]/g, "-");
-
-    if (cleaned.startsWith("bp") && !cleaned.startsWith("bp-")) {
-      cleaned = cleaned.replace(/^bp/, "bp-");
-    }
-
-    if (cleaned.startsWith("pd") && !cleaned.startsWith("pd-")) {
-      cleaned = cleaned.replace(/^pd/, "pd-");
-    }
-
-    if (
-      cleaned.startsWith("b") &&
-      !cleaned.startsWith("b-") &&
-      !cleaned.startsWith("bp-")
-    ) {
-      cleaned = cleaned.replace(/^b/, "b-");
-    }
-
-    return cleaned;
-  });
+  return matches.map((match) => normalizeWindowMark(match[1]));
 };
 
 const extractDimensions = (text: string) => {

@@ -25,7 +25,7 @@ const groupWorkItems = (items: WorkItem[]) => {
       const itemType = features.itemType || "";
 
       const key = mark
-        ? normalizeText(`${itemType} ${mark}`)
+        ? `${normalizeText(itemType)} ${mark}`
         : `row-${itemIndex}-${normalizeText(
             `${item.name} ${item.rate} ${item.unit}`
           )}`;
