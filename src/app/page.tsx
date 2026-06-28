@@ -22,9 +22,13 @@ import {
   loadArWindowsPdfCompare,
 } from "./projectPdf/arWindows/loadArWindowsPdfCompare";
 import type { PdfTextLayerDiagnostics } from "./projectPdf/pdfTextDiagnostics";
+import {
+  loadUnifiedProjectPdfCompare,
+  type UnifiedPdfProjectTechnicalInfo,
+} from "./projectPdf/loadUnifiedProjectPdfCompare";
 
 type SpecificationSource = "excel" | "pdf";
-type PdfProjectMode = "text" | "arWindows";
+type PdfProjectMode = "auto" | "text" | "arWindows";
 
 type PdfDiagnostics = {
   mode?: PdfProjectMode;
@@ -33,6 +37,7 @@ type PdfDiagnostics = {
   arWorkItemsCount?: number;
   excelOfferWorkItemsCount?: number;
   technicalInfo?: PdfTextLayerDiagnostics;
+  unifiedTechnicalInfo?: UnifiedPdfProjectTechnicalInfo;
   offerScope: OfferScope;
   statusCountsBeforeScope: Record<string, number>;
   statusCountsAfterScope: Record<string, number>;
@@ -50,7 +55,7 @@ export default function Home() {
   const [specificationSource, setSpecificationSource] =
     useState<SpecificationSource>("excel");
   const [pdfProjectMode, setPdfProjectMode] =
-    useState<PdfProjectMode>("text");
+    useState<PdfProjectMode>("auto");
   const [specItems, setSpecItems] = useState<WorkItem[]>([]);
   const [offerItems, setOfferItems] = useState<WorkItem[]>([]);
   const [results, setResults] = useState<CompareResult[]>([]);
@@ -105,7 +110,7 @@ export default function Home() {
     setResults([]);
     setProjectPdf(null);
     setOfferFile(null);
-    setPdfProjectMode("text");
+    setPdfProjectMode("auto");
     setPdfDiagnostics(null);
     setProcessingError("");
     setIsProcessing(false);
@@ -138,6 +143,66 @@ export default function Home() {
       return;
     }
 
+    if (pdfProjectMode === "auto") {
+      if (offerItems.length === 0 || !offerFile) {
+        setProcessingError("Р—Р°РіСЂСѓР·РёС‚Рµ Excel РљРџ РїРѕРґСЂСЏРґС‡РёРєР°");
+        return;
+      }
+
+      setIsProcessing(true);
+
+      try {
+        const unifiedResult = await loadUnifiedProjectPdfCompare({
+          mode: "auto",
+          pdfFile: projectPdf,
+          excelOfferFile: offerFile,
+          offerItems,
+        });
+        const offerScope = detectOfferScope(offerItems);
+        const comparison = applyOfferScopeToResults(
+          unifiedResult.results,
+          offerScope
+        );
+        const statusCountsAfterScope = countStatuses(comparison);
+
+        setSpecItems(unifiedResult.workItems);
+        setPdfDiagnostics({
+          mode: "auto",
+          beforeSplitCount: unifiedResult.textPdfResult?.beforeSplitCount,
+          afterSplitCount: unifiedResult.textPdfResult?.afterSplitCount,
+          arWorkItemsCount:
+            unifiedResult.technicalInfo.arWindowsWorkItemsCount,
+          excelOfferWorkItemsCount: offerItems.length,
+          technicalInfo:
+            unifiedResult.technicalInfo.textPdfTechnicalInfo ??
+            unifiedResult.technicalInfo.arWindowsTechnicalInfo,
+          unifiedTechnicalInfo: unifiedResult.technicalInfo,
+          offerScope,
+          statusCountsBeforeScope: unifiedResult.statusCounts,
+          statusCountsAfterScope,
+        });
+        setResults(comparison);
+
+        console.info("Unified PDF project comparison", {
+          technicalInfo: unifiedResult.technicalInfo,
+          statusCountsBeforeScope: unifiedResult.statusCounts,
+          statusCountsAfterScope,
+        });
+      } catch (error) {
+        setResults([]);
+        setPdfDiagnostics(null);
+        setProcessingError(
+          error instanceof Error
+            ? error.message
+            : "РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±СЂР°Р±РѕС‚Р°С‚СЊ PDF РїСЂРѕРµРєС‚Р°"
+        );
+      } finally {
+        setIsProcessing(false);
+      }
+
+      return;
+    }
+
     if (pdfProjectMode === "arWindows") {
       if (!offerFile) {
         setProcessingError("Загрузите Excel КП подрядчика");
@@ -156,6 +221,15 @@ export default function Home() {
           arWorkItemsCount: arResult.arWorkItemsCount,
           excelOfferWorkItemsCount: arResult.excelOfferWorkItemsCount,
           technicalInfo: arResult.technicalInfo,
+          unifiedTechnicalInfo: {
+            totalProjectWorkItemsCount: arResult.arWorkItems.length,
+            textPdfWorkItemsCount: 0,
+            arWindowsWorkItemsCount: arResult.arWorkItemsCount,
+            extractionStrategiesUsed: ["ar_windows_ocr"],
+            fallbackUsed: Boolean(arResult.technicalInfo.arFallbackUsed),
+            fallbackReason: arResult.technicalInfo.arFallbackReason,
+            arWindowsTechnicalInfo: arResult.technicalInfo,
+          },
           offerScope,
           statusCountsBeforeScope: arResult.statusCounts,
           statusCountsAfterScope: arResult.statusCounts,
@@ -210,6 +284,14 @@ export default function Home() {
         beforeSplitCount: pdfResult.beforeSplitCount,
         afterSplitCount: pdfResult.afterSplitCount,
         technicalInfo: pdfResult.technicalInfo,
+        unifiedTechnicalInfo: {
+          totalProjectWorkItemsCount: pdfResult.workItems.length,
+          textPdfWorkItemsCount: pdfResult.workItems.length,
+          arWindowsWorkItemsCount: 0,
+          extractionStrategiesUsed: ["pdf_text"],
+          fallbackUsed: false,
+          textPdfTechnicalInfo: pdfResult.technicalInfo,
+        },
         offerScope,
         statusCountsBeforeScope,
         statusCountsAfterScope,
@@ -376,6 +458,21 @@ export default function Home() {
                 <input
                   type="radio"
                   name="pdf-project-mode"
+                  value="auto"
+                  checked={pdfProjectMode === "auto"}
+                  onChange={() => {
+                    setPdfProjectMode("auto");
+                    setPdfDiagnostics(null);
+                    setProcessingError("");
+                    setResults([]);
+                  }}
+                />
+                Авто / весь проект
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="pdf-project-mode"
                   value="text"
                   checked={pdfProjectMode === "text"}
                   onChange={() => {
@@ -512,6 +609,41 @@ export default function Home() {
               : "-"}
           </p>
           <p>Excel offer WorkItems: {offerItems.length}</p>
+          <p>
+            Unified PDF mode:{" "}
+            {specificationSource === "pdf" ? pdfProjectMode : "-"}
+          </p>
+          <p>
+            Total project WorkItems:{" "}
+            {pdfDiagnostics?.unifiedTechnicalInfo
+              ?.totalProjectWorkItemsCount ?? "-"}
+          </p>
+          <p>
+            Text PDF WorkItems count:{" "}
+            {pdfDiagnostics?.unifiedTechnicalInfo?.textPdfWorkItemsCount ??
+              "-"}
+          </p>
+          <p>
+            AR windows WorkItems count:{" "}
+            {pdfDiagnostics?.unifiedTechnicalInfo?.arWindowsWorkItemsCount ??
+              "-"}
+          </p>
+          <p>
+            Extraction strategies used:{" "}
+            {pdfDiagnostics?.unifiedTechnicalInfo?.extractionStrategiesUsed.join(
+              ", "
+            ) || "-"}
+          </p>
+          <p>
+            Fallback used:{" "}
+            {pdfDiagnostics?.unifiedTechnicalInfo
+              ? String(pdfDiagnostics.unifiedTechnicalInfo.fallbackUsed)
+              : "-"}
+          </p>
+          <p>
+            Fallback reason:{" "}
+            {pdfDiagnostics?.unifiedTechnicalInfo?.fallbackReason || "-"}
+          </p>
           <p>
             AR WorkItems count:{" "}
             {pdfDiagnostics?.arWorkItemsCount ?? "-"}

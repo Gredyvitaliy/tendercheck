@@ -22,7 +22,7 @@ test("uses WorkItem position as the primary window mark when present", () => {
         name: "B-6(\u0437\u0435\u0440) Window B-6 (2000 x 2380)",
       })
     ),
-    "b-6(\u0437\u0435\u0440)"
+    "b-6(mirror)"
   );
 });
 
@@ -34,7 +34,7 @@ test("prefers a more specific name mark over a base rate mark", () => {
         name: "Window B-6(\u0437\u0435\u0440) (2000 x 2380)",
       })
     ),
-    "b-6(\u0437\u0435\u0440)"
+    "b-6(mirror)"
   );
   assert.equal(
     getPrimaryMark(
@@ -43,6 +43,18 @@ test("prefers a more specific name mark over a base rate mark", () => {
         name: "Window B-7* (4000 x 2380)",
       })
     ),
-    "b-7*"
+    "b-7(mirror)"
+  );
+});
+
+test("prefers a mirrored name mark over a base rate mark", () => {
+  assert.equal(
+    getPrimaryMark(
+      item({
+        rate: "B-7",
+        name: "Window B-7(\u0437\u0435\u0440\u043a) (4000 x 2380)",
+      })
+    ),
+    "b-7(mirror)"
   );
 });

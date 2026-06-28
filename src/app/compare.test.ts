@@ -14,6 +14,40 @@ const item = (overrides: Partial<WorkItem>): WorkItem => ({
   ...overrides,
 });
 
+test("matches starred AR window marks to mirrored offer marks without matching base marks", () => {
+  const specBase = item({
+    name: "B-7 Window",
+    position: "B-7",
+  });
+  const specMirror = item({
+    number: 2,
+    name: "B-7* Window",
+    position: "B-7*",
+  });
+  const offerBase = item({
+    name: "B-7 Window",
+    rate: "B-7",
+  });
+  const offerMirror = item({
+    number: 2,
+    name: "Window B-7(\u0437\u0435\u0440\u043a)",
+    rate: "B-7",
+  });
+
+  const results = compareWorkItems(
+    [specBase, specMirror],
+    [offerBase, offerMirror]
+  );
+
+  const baseResult = findSpecResult(results, specBase.name);
+  const mirrorResult = findSpecResult(results, specMirror.name);
+
+  assert.equal(baseResult.offerName, offerBase.name);
+  assert.equal(mirrorResult.offerName, offerMirror.name);
+  assert.equal(results.length, 2);
+  assert.equal(results.some((result) => result.name === "-"), false);
+});
+
 const findSpecResult = (results: ReturnType<typeof compareWorkItems>, name: string) => {
   const result = results.find((entry) => entry.name === name);
 
