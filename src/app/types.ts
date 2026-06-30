@@ -6,8 +6,9 @@ export type WorkItem = {
   projectVolume: number;
   rowType: "item";
   position?: string;
-  sourceDiscipline?: "text_pdf" | "ar_windows";
-  extractionStrategy?: "pdf_text" | "ar_windows_ocr";
+  sourceFileName?: string;
+  sourceDiscipline?: "ovik" | "ar_windows" | "text_pdf" | "unknown";
+  extractionStrategy?: "pdf_text" | "ar_windows_ocr" | "fallback";
 };
 
 export type CompareResultStatus =
