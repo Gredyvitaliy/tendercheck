@@ -7,6 +7,7 @@ import type {
 } from "./types";
 import { parseSpecExcel, parseOfferExcel } from "./parsers";
 import { exportResultsToExcel } from "./exportReport";
+import { exportBatchComparisonReport } from "./exportBatchReport";
 import { compareWorkItems } from "./compare";
 import {
   applyOfferScopeToResults,
@@ -26,9 +27,32 @@ import {
   loadUnifiedProjectPdfCompare,
   type UnifiedPdfProjectTechnicalInfo,
 } from "./projectPdf/loadUnifiedProjectPdfCompare";
+import {
+  loadBatchProjectPdfCompare,
+  getSelectedBatchResult,
+  type BatchCompareEntry,
+  type BatchCompareResult,
+  type BatchCompareSuccess,
+  type BatchOfferDisciplineOverride,
+} from "./projectPdf/loadBatchProjectPdfCompare";
+import {
+  getCompareButtonLabel,
+  getControlsDisabled,
+  getExportButtonLabel,
+  getExportDisabled,
+  getLoadingMessage,
+  getProcessingSteps,
+} from "./loadingUi";
 
 type SpecificationSource = "excel" | "pdf";
 type PdfProjectMode = "auto" | "text" | "arWindows";
+type CompareMode = "single" | "batch";
+
+type BatchOfferState = {
+  file: File;
+  offerItems: WorkItem[];
+  disciplineOverride: BatchOfferDisciplineOverride;
+};
 
 type PdfDiagnostics = {
   mode?: PdfProjectMode;
@@ -51,7 +75,13 @@ const countStatuses = (
     return counts;
   }, {});
 
+const parseOfferExcelFile = (file: File): Promise<WorkItem[]> =>
+  new Promise((resolve) => {
+    parseOfferExcel(file, resolve);
+  });
+
 export default function Home() {
+  const [compareMode, setCompareMode] = useState<CompareMode>("single");
   const [specificationSource, setSpecificationSource] =
     useState<SpecificationSource>("excel");
   const [pdfProjectMode, setPdfProjectMode] =
@@ -60,10 +90,17 @@ export default function Home() {
   const [offerItems, setOfferItems] = useState<WorkItem[]>([]);
   const [results, setResults] = useState<CompareResult[]>([]);
   const [projectPdf, setProjectPdf] = useState<File | null>(null);
+  const [projectPdfs, setProjectPdfs] = useState<File[]>([]);
   const [offerFile, setOfferFile] = useState<File | null>(null);
+  const [batchOffers, setBatchOffers] = useState<BatchOfferState[]>([]);
+  const [batchResult, setBatchResult] =
+    useState<BatchCompareResult | null>(null);
+  const [selectedBatchResultId, setSelectedBatchResultId] =
+    useState<string | null>(null);
   const [pdfDiagnostics, setPdfDiagnostics] =
     useState<PdfDiagnostics | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [processingError, setProcessingError] = useState("");
   const [statusFilter, setStatusFilter] = useState<
     CompareResult["status"] | "Все"
@@ -83,24 +120,46 @@ export default function Home() {
   const handleProjectPdfUpload = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const file = e.target.files?.[0] ?? null;
+    const files = Array.from(e.target.files ?? []);
+    const file = files[0] ?? null;
+    setProjectPdfs(files);
     setProjectPdf(file);
     setPdfDiagnostics(null);
     setProcessingError("");
     setResults([]);
+    setBatchResult(null);
+    setSelectedBatchResultId(null);
   };
 
   const handleOfferUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
+  const files = Array.from(e.target.files ?? []);
+  const file = files[0];
   if (!file) return;
 
   setOfferFile(file);
   setPdfDiagnostics(null);
   setProcessingError("");
   setResults([]);
+  setBatchResult(null);
+  setSelectedBatchResultId(null);
+
+  if (compareMode === "batch") {
+    void Promise.all(
+      files.map(async (offer) => ({
+        file: offer,
+        offerItems: await parseOfferExcelFile(offer),
+        disciplineOverride: "auto" as const,
+      }))
+    ).then((parsedOffers) => {
+      setBatchOffers(parsedOffers);
+      setOfferItems(parsedOffers[0]?.offerItems ?? []);
+    });
+    return;
+  }
 
   parseOfferExcel(file, (items) => {
     setOfferItems(items);
+    setBatchOffers([]);
   });
 };
 
@@ -109,18 +168,124 @@ export default function Home() {
     setOfferItems([]);
     setResults([]);
     setProjectPdf(null);
+    setProjectPdfs([]);
     setOfferFile(null);
+    setBatchOffers([]);
+    setBatchResult(null);
+    setSelectedBatchResultId(null);
+    setCompareMode("single");
     setPdfProjectMode("auto");
     setPdfDiagnostics(null);
     setProcessingError("");
     setIsProcessing(false);
+    setIsExporting(false);
     setSearchQuery("");
     setStatusFilter("Все");
     setUploadResetKey((prev) => prev + 1);
   };
 
+  const openBatchResult = (entry: BatchCompareSuccess) => {
+    const offerScope = detectOfferScope(
+      batchOffers.find((offer) => entry.summary.offerFilename === offer.file.name)
+        ?.offerItems ?? []
+    );
+
+    setSelectedBatchResultId(entry.id);
+    setSpecItems(entry.compareResult.workItems);
+    setResults(entry.compareResult.results);
+    setPdfDiagnostics({
+      mode: pdfProjectMode,
+      arWorkItemsCount:
+        entry.compareResult.technicalInfo.arWindowsWorkItemsCount,
+      excelOfferWorkItemsCount: entry.summary.excelOfferWorkItemsCount,
+      technicalInfo:
+        entry.compareResult.technicalInfo.textPdfTechnicalInfo ??
+        entry.compareResult.technicalInfo.arWindowsTechnicalInfo,
+      unifiedTechnicalInfo: entry.compareResult.technicalInfo,
+      offerScope,
+      statusCountsBeforeScope: entry.compareResult.statusCounts,
+      statusCountsAfterScope: entry.compareResult.statusCounts,
+    });
+  };
+
+  const updateBatchOfferOverride = (
+    fileName: string,
+    disciplineOverride: BatchOfferDisciplineOverride
+  ) => {
+    setBatchOffers((offers) =>
+      offers.map((offer) =>
+        offer.file.name === fileName ? { ...offer, disciplineOverride } : offer
+      )
+    );
+    setBatchResult(null);
+    setSelectedBatchResultId(null);
+    setResults([]);
+    setPdfDiagnostics(null);
+  };
+
   const compareFiles = async () => {
+    if (isProcessing) return;
+
     setProcessingError("");
+
+    if (compareMode === "batch") {
+      if (specificationSource !== "pdf") {
+        setProcessingError("Batch mode supports PDF project checks");
+        return;
+      }
+
+      const batchProjectPdf = projectPdfs[0] ?? projectPdf;
+
+      if (!batchProjectPdf) {
+        setProcessingError("Загрузите PDF проекта");
+        return;
+      }
+
+      if (batchOffers.length === 0) {
+        setProcessingError("Загрузите несколько Excel КП подрядчика");
+        return;
+      }
+
+      setIsProcessing(true);
+      setBatchResult(null);
+      setSelectedBatchResultId(null);
+      setResults([]);
+
+      try {
+        const nextBatchResult = await loadBatchProjectPdfCompare({
+          mode: pdfProjectMode,
+          projectPdf: batchProjectPdf,
+          projectPdfs,
+          offers: batchOffers,
+        });
+        const firstSuccess = nextBatchResult.results.find(
+          (entry): entry is BatchCompareSuccess => entry.status === "success"
+        );
+
+        setBatchResult(nextBatchResult);
+
+        if (firstSuccess) {
+          openBatchResult(firstSuccess);
+        }
+
+        if (!firstSuccess) {
+          setPdfDiagnostics(null);
+          setProcessingError("Все КП завершились ошибкой");
+        }
+      } catch (error) {
+        setBatchResult(null);
+        setPdfDiagnostics(null);
+        setProcessingError(
+          error instanceof Error
+            ? error.message
+            : "Не удалось выполнить пакетную проверку"
+        );
+      } finally {
+        setIsProcessing(false);
+      }
+
+      return;
+    }
 
     if (specificationSource === "excel") {
       if (offerItems.length === 0) {
@@ -133,8 +298,21 @@ export default function Home() {
         return;
       }
 
+      setIsProcessing(true);
       setPdfDiagnostics(null);
-      setResults(compareWorkItems(specItems, offerItems));
+
+      try {
+        setResults(compareWorkItems(specItems, offerItems));
+      } catch (error) {
+        setResults([]);
+        setProcessingError(
+          error instanceof Error
+            ? error.message
+            : "Не удалось выполнить сравнение"
+        );
+      } finally {
+        setIsProcessing(false);
+      }
       return;
     }
 
@@ -400,6 +578,48 @@ export default function Home() {
         .includes(query);
     });
 
+  const selectedBatchResult = getSelectedBatchResult(
+    batchResult,
+    selectedBatchResultId
+  );
+
+  const handleOpenBatchResult = (entry: BatchCompareEntry) => {
+    if (entry.status !== "success") return;
+
+    openBatchResult(entry);
+  };
+
+  const exportExcelReport = async () => {
+    if (isProcessing || isExporting) return;
+
+    setIsExporting(true);
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      if (compareMode === "batch" && batchResult) {
+        exportBatchComparisonReport(batchResult);
+        return;
+      }
+
+      exportResultsToExcel(results);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const controlsDisabled = getControlsDisabled({
+    isProcessing,
+    processingError,
+  });
+  const exportDisabled = getExportDisabled({
+    compareMode,
+    resultsCount: results.length,
+    hasBatchResult: batchResult !== null,
+    isProcessing,
+    isExporting,
+  });
+
   return (
     <main className="min-h-screen bg-gray-100 p-10">
       <h1 className="text-4xl font-bold mb-6 text-gray-800">TenderCheck</h1>
@@ -407,6 +627,45 @@ export default function Home() {
       <p className="mb-6 text-lg text-gray-600">
         Сравнение спецификации и КП подрядчика
       </p>
+
+      <div className="mb-6 rounded-xl bg-white p-6 shadow">
+        <h2 className="mb-3 text-lg font-semibold">Режим проверки</h2>
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="compare-mode"
+              value="single"
+              checked={compareMode === "single"}
+              disabled={controlsDisabled}
+              onChange={() => {
+                setCompareMode("single");
+                setBatchResult(null);
+                setSelectedBatchResultId(null);
+                setResults([]);
+              }}
+            />
+            Одна проверка
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="compare-mode"
+              value="batch"
+              checked={compareMode === "batch"}
+              disabled={controlsDisabled}
+              onChange={() => {
+                setCompareMode("batch");
+                setSpecificationSource("pdf");
+                setBatchResult(null);
+                setSelectedBatchResultId(null);
+                setResults([]);
+              }}
+            />
+            Пакетная проверка
+          </label>
+        </div>
+      </div>
 
       <div className="mb-6 rounded-xl bg-white p-6 shadow">
         <h2 className="mb-3 text-lg font-semibold">
@@ -419,6 +678,7 @@ export default function Home() {
               name="specification-source"
               value="excel"
               checked={specificationSource === "excel"}
+              disabled={controlsDisabled}
               onChange={() => {
                 setSpecificationSource("excel");
                 setProjectPdf(null);
@@ -436,6 +696,7 @@ export default function Home() {
               name="specification-source"
               value="pdf"
               checked={specificationSource === "pdf"}
+              disabled={controlsDisabled}
               onChange={() => {
                 setSpecificationSource("pdf");
                 setSpecItems([]);
@@ -460,6 +721,7 @@ export default function Home() {
                   name="pdf-project-mode"
                   value="auto"
                   checked={pdfProjectMode === "auto"}
+                  disabled={controlsDisabled}
                   onChange={() => {
                     setPdfProjectMode("auto");
                     setPdfDiagnostics(null);
@@ -475,6 +737,7 @@ export default function Home() {
                   name="pdf-project-mode"
                   value="text"
                   checked={pdfProjectMode === "text"}
+                  disabled={controlsDisabled}
                   onChange={() => {
                     setPdfProjectMode("text");
                     setPdfDiagnostics(null);
@@ -490,6 +753,7 @@ export default function Home() {
                   name="pdf-project-mode"
                   value="arWindows"
                   checked={pdfProjectMode === "arWindows"}
+                  disabled={controlsDisabled}
                   onChange={() => {
                     setPdfProjectMode("arWindows");
                     setPdfDiagnostics(null);
@@ -517,24 +781,28 @@ export default function Home() {
               accept=".xlsx, .xls"
               onChange={handleSpecUpload}
               aria-label="Загрузить Excel спецификацию"
+              disabled={controlsDisabled}
             />
           ) : (
             <input
               key={`pdf-${uploadResetKey}`}
               type="file"
               accept="application/pdf,.pdf"
+              multiple={compareMode === "batch"}
               onChange={handleProjectPdfUpload}
               aria-label="Загрузить PDF проекта"
-              disabled={isProcessing}
+              disabled={controlsDisabled}
             />
           )}
 
           <p className="mt-4 text-sm text-gray-600">
             {specificationSource === "excel"
               ? `Загружено позиций: ${specItems.length}`
-              : projectPdf
-                ? `Выбран файл: ${projectPdf.name}`
-                : "PDF проекта не выбран"}
+              : compareMode === "batch"
+                ? `PDF файлов выбрано: ${projectPdfs.length}`
+                : projectPdf
+                  ? `Выбран файл: ${projectPdf.name}`
+                  : "PDF проекта не выбран"}
           </p>
         </div>
 
@@ -545,12 +813,15 @@ export default function Home() {
             key={`offer-${uploadResetKey}`}
             type="file"
             accept=".xlsx, .xls"
+            multiple={compareMode === "batch"}
             onChange={handleOfferUpload}
-            disabled={isProcessing}
+            disabled={controlsDisabled}
           />
 
           <p className="mt-4 text-sm text-gray-600">
-            Загружено позиций: {offerItems.length}
+            {compareMode === "batch"
+              ? `Excel КП файлов: ${batchOffers.length}`
+              : `Загружено позиций: ${offerItems.length}`}
           </p>
         </div>
       </div>
@@ -560,30 +831,72 @@ export default function Home() {
         disabled={isProcessing}
         className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-xl text-lg mb-8"
       >
-        {isProcessing ? "Обработка PDF..." : "Сравнить файлы"}
+        <span className="inline-flex items-center gap-2">
+          {isProcessing && (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+          )}
+          {getCompareButtonLabel(compareMode, isProcessing)}
+        </span>
       </button>
 
       <button
-        onClick={() => exportResultsToExcel(results)}
-        disabled={results.length === 0}
+        onClick={() => void exportExcelReport()}
+        disabled={exportDisabled}
         className="ml-4 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-xl text-lg mb-8"
       >
-        Скачать отчет Excel
+        <span className="inline-flex items-center gap-2">
+          {isExporting && (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+          )}
+          {getExportButtonLabel(isExporting)}
+        </span>
       </button>
 
       <button
         onClick={clearAllData}
         disabled={
-          specItems.length === 0 &&
-          offerItems.length === 0 &&
-          results.length === 0 &&
-          projectPdf === null &&
-          offerFile === null
+          isProcessing ||
+          (specItems.length === 0 &&
+            offerItems.length === 0 &&
+            results.length === 0 &&
+            projectPdf === null &&
+            offerFile === null &&
+            projectPdfs.length === 0 &&
+            batchOffers.length === 0 &&
+            batchResult === null)
         }
         className="ml-4 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-xl text-lg mb-8"
       >
         Очистить файлы
       </button>
+
+      {isProcessing && (
+        <div
+          className="mb-8 rounded-xl border border-blue-200 bg-blue-50 p-5 text-blue-950 shadow"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-start gap-3">
+            <span className="mt-1 h-6 w-6 animate-spin rounded-full border-4 border-blue-200 border-t-blue-700" />
+            <div>
+              <p className="font-semibold">
+                {getCompareButtonLabel(compareMode, true)}
+              </p>
+              <p className="mt-1 text-sm">{getLoadingMessage(compareMode)}</p>
+              <ol className="mt-3 grid gap-1 text-sm md:grid-cols-5">
+                {getProcessingSteps().map((step) => (
+                  <li
+                    key={step}
+                    className="rounded-lg bg-white/70 px-3 py-2 text-center"
+                  >
+                    {step}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mb-8 rounded-xl bg-white p-6 shadow">
         <h2 className="mb-3 text-lg font-semibold">
@@ -722,6 +1035,108 @@ export default function Home() {
           </p>
         )}
       </div>
+
+      {compareMode === "batch" && batchResult && (
+        <div className="mb-8 rounded-xl bg-white p-6 shadow overflow-auto">
+          <h2 className="mb-4 text-2xl font-semibold">Сводка пакетной проверки</h2>
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b bg-gray-50 text-left">
+                <th className="p-2">КП</th>
+                <th className="p-2">Override</th>
+                <th className="p-2">Дисциплина КП</th>
+                <th className="p-2">Часть проекта</th>
+                <th className="p-2">Excel позиций</th>
+                <th className="p-2">PDF использовано</th>
+                <th className="p-2">PDF всего</th>
+                <th className="p-2">ОК</th>
+                <th className="p-2">Объем отличается</th>
+                <th className="p-2">Размер отличается</th>
+                <th className="p-2">Нет в КП</th>
+                <th className="p-2">Есть в КП, нет в спецификации</th>
+                <th className="p-2">Warning</th>
+                <th className="p-2">Результат</th>
+              </tr>
+            </thead>
+            <tbody>
+              {batchResult.results.map((entry) => (
+                <tr
+                  key={entry.id}
+                  className={
+                    selectedBatchResult?.id === entry.id
+                      ? "border-b bg-blue-50"
+                      : "border-b"
+                  }
+                >
+                  <td className="p-2 font-medium">
+                    {entry.summary.offerFilename}
+                    {entry.status === "failed" && entry.summary.error ? (
+                      <p className="mt-1 text-xs text-red-700">
+                        {entry.summary.error}
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className="p-2">
+                    <select
+                      value={
+                        batchOffers.find(
+                          (offer) => offer.file.name === entry.summary.offerFilename
+                        )?.disciplineOverride ?? "auto"
+                      }
+                      disabled={controlsDisabled}
+                      onChange={(event) =>
+                        updateBatchOfferOverride(
+                          entry.summary.offerFilename,
+                          event.target.value as BatchOfferDisciplineOverride
+                        )
+                      }
+                      className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                    >
+                      <option value="auto">Авто</option>
+                      <option value="ovik">ОВиК</option>
+                      <option value="ar_windows">АР окна / витражи</option>
+                      <option value="all_project">Весь проект</option>
+                    </select>
+                  </td>
+                  <td className="p-2">
+                    {entry.summary.detectedOfferDiscipline}
+                  </td>
+                  <td className="p-2">
+                    {entry.summary.matchedProjectDiscipline}
+                  </td>
+                  <td className="p-2">
+                    {entry.summary.excelOfferWorkItemsCount}
+                  </td>
+                  <td className="p-2">
+                    {entry.summary.projectWorkItemsUsedCount}
+                  </td>
+                  <td className="p-2">
+                    {entry.summary.totalProjectWorkItemsCount}
+                  </td>
+                  <td className="p-2">{entry.summary.okCount}</td>
+                  <td className="p-2">{entry.summary.volumeDiffCount}</td>
+                  <td className="p-2">{entry.summary.sizeDiffCount}</td>
+                  <td className="p-2">{entry.summary.missingCount}</td>
+                  <td className="p-2">{entry.summary.extraOfferCount}</td>
+                  <td className="p-2 text-xs text-amber-700">
+                    {entry.summary.warning ?? ""}
+                  </td>
+                  <td className="p-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenBatchResult(entry)}
+                      disabled={entry.status === "failed"}
+                      className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"
+                    >
+                      Открыть результат
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl p-6 shadow overflow-auto">
         <h2 className="text-2xl font-semibold mb-4">Результат сравнения</h2>

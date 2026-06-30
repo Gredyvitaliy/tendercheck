@@ -13,7 +13,7 @@ import type {
 import { loadArWindowsPdfCompare } from "./arWindows/loadArWindowsPdfCompare";
 
 export type UnifiedPdfProjectMode = "auto" | "text" | "arWindows";
-export type ExtractionStrategy = "pdf_text" | "ar_windows_ocr";
+export type ExtractionStrategy = "pdf_text" | "ar_windows_ocr" | "fallback";
 
 export interface UnifiedPdfProjectTechnicalInfo {
   totalProjectWorkItemsCount: number;
@@ -160,7 +160,13 @@ export const loadUnifiedProjectPdfCompare = async ({
     ? withMetadata(textPdfResult.workItems, "text_pdf", "pdf_text")
     : [];
   const arItems = arWindowsResult
-    ? withMetadata(arWindowsResult.arWorkItems, "ar_windows", "ar_windows_ocr")
+    ? withMetadata(
+        arWindowsResult.arWorkItems,
+        "ar_windows",
+        arWindowsResult.technicalInfo.arFallbackUsed
+          ? "fallback"
+          : "ar_windows_ocr"
+      )
     : [];
   const workItems = dedupeWorkItems([...textItems, ...arItems]);
   const results = compareWorkItems(workItems, offerItems);
@@ -171,7 +177,11 @@ export const loadUnifiedProjectPdfCompare = async ({
   }
 
   if (arWindowsResult) {
-    extractionStrategiesUsed.push("ar_windows_ocr");
+    extractionStrategiesUsed.push(
+      arWindowsResult.technicalInfo.arFallbackUsed
+        ? "fallback"
+        : "ar_windows_ocr"
+    );
   }
 
   return {
